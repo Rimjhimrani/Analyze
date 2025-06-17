@@ -285,12 +285,19 @@ class InventoryManagementSystem:
             
             # User switching option for Admin
             if st.session_state.user_role == "Admin":
-                st.sidebar.markdown("---")
-                st.sidebar.markdown("### 🔄 Switch Role")
-                if st.sidebar.button("👤 Switch to User View", key="switch_to_user"):
-                    st.session_state.user_role = "User"
-                    st.sidebar.success("✅ Switched to User view!")
-                    st.rerun()
+                # ✅ Show PFEP lock status
+                pfep_locked = st.session_state.get("persistent_pfep_locked", False)
+                st.sidebar.markdown(f"🔒 PFEP Locked: **{pfep_locked}**")
+                # ✅ Always show switch role if PFEP is locked
+                if pfep_locked:
+                    st.sidebar.markdown("### 🔄 Switch Role")
+                    if st.sidebar.button("👤 Switch to User View", key="switch_to_user"):
+                        st.session_state.user_role = "User"
+                        st.sidebar.success("✅ Switched to User view!")
+                        st.rerun()
+                else:
+                    st.sidebar.info("ℹ️ PFEP is not locked. Lock PFEP to allow switching to User.")
+
             
             # User preferences (for Admin only)
             if st.session_state.user_role == "Admin":
