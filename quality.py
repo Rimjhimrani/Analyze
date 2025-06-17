@@ -56,6 +56,23 @@ st.markdown("""
     background-color: #e8f5e8;
     border-left: 4px solid #4caf50;
 }
+
+.success-box {
+    background-color: #d4edda;
+    border: 1px solid #c3e6cb;
+    border-radius: 5px;
+    padding: 15px;
+    margin: 10px 0;
+}
+
+.lock-button {
+    background-color: #28a745;
+    color: white;
+    padding: 10px 20px;
+    border-radius: 5px;
+    border: none;
+    font-weight: bold;
+}
 </style>
 """, unsafe_allow_html=True)
 
@@ -137,6 +154,13 @@ class InventoryManagementSystem:
                 'default_tolerance': 30,
                 'chart_theme': 'plotly'
             }
+        
+        # Initialize data processing flags
+        if 'pfep_processed' not in st.session_state:
+            st.session_state.pfep_processed = False
+        
+        if 'inventory_processed' not in st.session_state:
+            st.session_state.inventory_processed = False
     
     def safe_float_convert(self, value):
         """Enhanced safe float conversion with better error handling"""
@@ -462,13 +486,20 @@ class InventoryManagementSystem:
             with col2:
                 if st.button("🔓 Unlock Data", type="secondary"):
                     st.session_state.pfep_data_locked = False
+                    st.session_state.pfep_processed = False
                     # Clear user inventory data when PFEP is unlocked
                     if hasattr(st.session_state, 'current_inventory'):
                         del st.session_state.current_inventory
                     if hasattr(st.session_state, 'inventory_data_locked'):
                         del st.session_state.inventory_data_locked
+                    if hasattr(st.session_state, 'inventory_processed'):
+                        del st.session_state.inventory_processed
                     st.success("✅ PFEP data unlocked. Users need to re-upload inventory data.")
                     st.rerun()
+            
+            # Display current PFEP data if available
+            if hasattr(st.session_state, 'pfep_data') and st.session_state.pfep_data:
+                self.display_pfep_data_preview()
             return
         
         # PFEP Data Loading Options
@@ -514,45 +545,73 @@ class InventoryManagementSystem:
                     st.dataframe(df.head(), use_container_width=True)
                 
                 # Process and standardize data
-                if st.button("🔄 Process & Load PFEP Data", type="primary"):
-                    with st.spinner("Processing PFEP data..."):
-                        standardized_data = self.standardize_pfep_data(df)
-                        
-                        if standardized_data:
-                            st.session_state.pfep_data = standardized_data
-                            st.session_state.pfep_upload_time = datetime.now()
-                            st.success(f"✅ Successfully processed {len(standardized_data)} PFEP records!")
+                col1, col2 = st.columns([2, 1])
+                with col1:
+                    if st.button("🔄 Process & Load PFEP Data", type="primary", key="process_pfep_file"):
+                        with st.spinner("Processing PFEP data..."):
+                            standardized_data = self.standardize_pfep_data(df)
                             
-                            # Option to lock data
-                            if st.button("🔒 Lock PFEP Data for User Access", key="lock_pfep"):
-                                st.session_state.pfep_data_locked = True
-                                st.success("🔒 PFEP data locked! Users can now upload inventory data.")
+                            if standardized_data:
+                                st.session_state.pfep_data = standardized_data
+                                st.session_state.pfep_upload_time = datetime.now()
+                                st.session_state.pfep_processed = True
+                                st.success(f"✅ Successfully processed {len(standardized_data)} PFEP records!")
                                 st.rerun()
-                        else:
-                            st.error("❌ Failed to process PFEP data. Please check file format.")
-                            
+                            else:
+                                st.error("❌ Failed to process PFEP data. Please check file format.")
+                                
             except Exception as e:
                 st.error(f"❌ Error reading file: {str(e)}")
+        
+        # Show lock button if data is processed but not locked
+        if (hasattr(st.session_state, 'pfep_data') and 
+            st.session_state.pfep_data and 
+            st.session_state.get('pfep_processed', False) and 
+            not st.session_state.get('pfep_data_locked', False)):
+            
+            st.markdown("---")
+            st.markdown("### 🔒 Lock Data for User Access")
+            st.info("Lock the PFEP data to allow users to upload inventory data and perform analysis.")
+            
+            if st.button("🔒 Lock PFEP Data for User Access", type="primary", key="lock_pfep_file"):
+                st.session_state.pfep_data_locked = True
+                st.success("🔒 PFEP data locked! Users can now upload inventory data.")
+                st.balloons()
+                st.rerun()
     
     def handle_pfep_sample_data(self):
         """Handle sample PFEP data loading"""
         st.info("🎮 This will load sample PFEP data for demonstration purposes")
         
-        if st.button("📊 Load Sample PFEP Data", type="primary"):
-            with st.spinner("Loading sample data..."):
-                sample_data = self.load_sample_pfep_data()
-                st.session_state.pfep_data = sample_data
-                st.success(f"✅ Loaded sample PFEP data with {len(sample_data)} records!")
-                
-                # Option to lock data
-                if st.button("🔒 Lock PFEP Data for User Access", key="lock_sample_pfep"):
-                    st.session_state.pfep_data_locked = True
-                    st.success("🔒 PFEP data locked! Users can now upload inventory data.")
+        col1, col2 = st.columns([2, 1])
+        with col1:
+            if st.button("📊 Load Sample PFEP Data", type="primary", key="load_sample_pfep"):
+                with st.spinner("Loading sample data..."):
+                    sample_data = self.load_sample_pfep_data()
+                    st.session_state.pfep_data = sample_data
+                    st.session_state.pfep_processed = True
+                    st.success(f"✅ Loaded sample PFEP data with {len(sample_data)} records!")
                     st.rerun()
+        
+        # Show lock button if data is processed but not locked
+        if (hasattr(st.session_state, 'pfep_data') and 
+            st.session_state.pfep_data and 
+            st.session_state.get('pfep_processed', False) and 
+            not st.session_state.get('pfep_data_locked', False)):
+            
+            st.markdown("---")
+            st.markdown("### 🔒 Lock Data for User Access")
+            st.info("Lock the PFEP data to allow users to upload inventory data and perform analysis.")
+            
+            if st.button("🔒 Lock PFEP Data for User Access", type="primary", key="lock_sample_pfep"):
+                st.session_state.pfep_data_locked = True
+                st.success("🔒 PFEP data locked! Users can now upload inventory data.")
+                st.balloons()
+                st.rerun()
     
     def display_pfep_data_preview(self):
         """Display PFEP data preview for admin"""
-        st.subheader("📋 Current PFEP Data")
+        st.subheader("📋 Current PFEP Data Preview")
         
         pfep_df = pd.DataFrame(st.session_state.pfep_data)
         
@@ -561,50 +620,46 @@ class InventoryManagementSystem:
         with col1:
             st.metric("Total Parts", len(pfep_df))
         with col2:
-            st.metric("Unique Vendors", pfep_df['Vendor_Code'].nunique() if 'Vendor_Code' in pfep_df.columns else 0)
+            st.metric("Total RM Quantity", f"{pfep_df['RM_IN_QTY'].sum():.0f}")
         with col3:
-            st.metric("Total RM Requirement", f"{pfep_df['RM_IN_QTY'].sum():.2f}")
+            st.metric("Unique Vendors", pfep_df['Vendor_Name'].nunique())
         with col4:
-            locked_status = "🔒 Locked" if getattr(st.session_state, 'pfep_data_locked', False) else "🔓 Unlocked"
-            st.metric("Status", locked_status)
+            st.metric("Unique Cities", pfep_df['City'].nunique())
         
-        # Data preview
-        with st.expander("📊 PFEP Data Preview", expanded=True):
-            st.dataframe(pfep_df, use_container_width=True)
+        # Data table
+        st.dataframe(pfep_df, use_container_width=True, height=300)
+        
+        # Vendor distribution
+        vendor_counts = pfep_df['Vendor_Name'].value_counts()
+        fig_vendor = px.pie(
+            values=vendor_counts.values,
+            names=vendor_counts.index,
+            title="Parts Distribution by Vendor"
+        )
+        st.plotly_chart(fig_vendor, use_container_width=True)
     
     def user_inventory_management(self):
-        """User-only current inventory management interface"""
-        st.header("👤 User Dashboard - Current Inventory Upload")
-        
+        """User interface for inventory data upload and analysis"""
         # Check if PFEP data is available and locked
         if not hasattr(st.session_state, 'pfep_data') or not st.session_state.pfep_data:
-            st.error("❌ No PFEP master data available. Please contact admin to load PFEP data first.")
+            st.error("❌ No PFEP master data available. Please contact admin to load PFEP data.")
             return
         
-        if not getattr(st.session_state, 'pfep_data_locked', False):
-            st.warning("⚠️ PFEP data is not locked yet. Please wait for admin to lock the data before uploading inventory.")
+        if not st.session_state.get('pfep_data_locked', False):
+            st.warning("⚠️ PFEP data is not yet locked by admin. Please wait for admin to lock the data.")
             return
         
-        # Check if inventory data is already locked
-        inv_locked = getattr(st.session_state, 'inventory_data_locked', False)
+        st.header("📊 Inventory Analysis Dashboard")
         
-        if inv_locked:
-            st.success("🔒 Your inventory data is locked and ready for analysis!")
-            self.display_analysis_dashboard()
+        # Check if inventory data is locked
+        inventory_locked = getattr(st.session_state, 'inventory_data_locked', False)
+        
+        if inventory_locked:
+            st.success("🔒 Inventory data is locked. Analysis results are available below.")
+            self.display_analysis_results()
             return
         
-        # Display PFEP summary for user reference
-        pfep_df = pd.DataFrame(st.session_state.pfep_data)
-        st.subheader("📋 Reference: PFEP Master Data")
-        col1, col2, col3 = st.columns(3)
-        with col1:
-            st.metric("Total Parts in PFEP", len(pfep_df))
-        with col2:
-            st.metric("Required Parts for Upload", len(pfep_df))
-        with col3:
-            st.metric("Total RM Requirement", f"{pfep_df['RM_IN_QTY'].sum():.2f}")
-        
-        # Inventory upload section
+        # Inventory data upload section
         st.subheader("📦 Upload Current Inventory Data")
         
         data_source = st.radio(
@@ -618,6 +673,10 @@ class InventoryManagementSystem:
             self.handle_inventory_file_upload()
         else:
             self.handle_inventory_sample_data()
+        
+        # Show analysis section if inventory data is available
+        if hasattr(st.session_state, 'current_inventory') and st.session_state.current_inventory:
+            self.display_inventory_analysis_section()
     
     def handle_inventory_file_upload(self):
         """Handle inventory file upload with validation"""
@@ -643,469 +702,472 @@ class InventoryManagementSystem:
                     st.dataframe(df.head(), use_container_width=True)
                 
                 # Process and validate data
-                if st.button("🔄 Process & Validate Inventory Data", type="primary"):
-                    with st.spinner("Processing inventory data..."):
-                        standardized_data = self.standardize_current_inventory(df)
-                        
-                        if standardized_data:
-                            # Validate against PFEP
-                            validation_result = self.validate_inventory_against_pfep(standardized_data)
+                col1, col2 = st.columns([2, 1])
+                with col1:
+                    if st.button("🔄 Process & Validate Inventory Data", type="primary", key="process_inventory_file"):
+                        with st.spinner("Processing inventory data..."):
+                            standardized_data = self.standardize_current_inventory(df)
                             
-                            # Display validation results
-                            self.display_validation_results(validation_result)
-                            
-                            if validation_result['is_valid'] or st.checkbox("Proceed despite validation issues"):
+                            if standardized_data:
+                                # Validate against PFEP
+                                validation_result = self.validate_inventory_against_pfep(standardized_data)
+                                
+                                # Display validation results
+                                if validation_result['is_valid']:
+                                    st.success("✅ Inventory data validation passed!")
+                                else:
+                                    st.warning("⚠️ Inventory data has some issues:")
+                                    for issue in validation_result['issues']:
+                                        st.error(f"❌ {issue}")
+                                
+                                if validation_result['warnings']:
+                                    st.info("ℹ️ Warnings:")
+                                    for warning in validation_result['warnings']:
+                                        st.warning(f"⚠️ {warning}")
+                                
+                                # Show validation summary
+                                col1, col2, col3 = st.columns(3)
+                                with col1:
+                                    st.metric("PFEP Parts", validation_result['pfep_parts_count'])
+                                with col2:
+                                    st.metric("Inventory Parts", validation_result['inventory_parts_count'])
+                                with col3:
+                                    st.metric("Matching Parts", validation_result['matching_parts_count'])
+                                
                                 st.session_state.current_inventory = standardized_data
                                 st.session_state.inventory_upload_time = datetime.now()
-                                st.success(f"✅ Successfully processed {len(standardized_data)} inventory records!")
+                                st.session_state.inventory_processed = True
+                                st.session_state.validation_result = validation_result
                                 
-                                # Option to lock data and proceed to analysis
-                                if st.button("🔒 Lock Data & Start Analysis", key="lock_inventory"):
-                                    st.session_state.inventory_data_locked = True
-                                    st.success("🔒 Inventory data locked! Starting analysis...")
-                                    st.rerun()
-                        else:
-                            st.error("❌ Failed to process inventory data. Please check file format.")
-                            
+                                st.success(f"✅ Successfully processed {len(standardized_data)} inventory records!")
+                                st.rerun()
+                            else:
+                                st.error("❌ Failed to process inventory data. Please check file format.")
+                                
             except Exception as e:
                 st.error(f"❌ Error reading file: {str(e)}")
     
     def handle_inventory_sample_data(self):
         """Handle sample inventory data loading"""
-        st.info("🎮 This will load sample inventory data that matches the current PFEP data")
+        st.info("🎮 This will load sample inventory data that matches the PFEP data")
         
-        if st.button("📊 Load Sample Inventory Data", type="primary"):
-            with st.spinner("Loading sample inventory data..."):
-                sample_data = self.load_sample_current_inventory()
-                
-                # Validate against PFEP
-                validation_result = self.validate_inventory_against_pfep(sample_data)
-                self.display_validation_results(validation_result)
-                
-                st.session_state.current_inventory = sample_data
-                st.session_state.inventory_upload_time = datetime.now()
-                st.success(f"✅ Loaded sample inventory data with {len(sample_data)} records!")
-                
-                # Option to lock data and proceed to analysis
-                if st.button("🔒 Lock Data & Start Analysis", key="lock_sample_inventory"):
-                    st.session_state.inventory_data_locked = True
-                    st.success("🔒 Inventory data locked! Starting analysis...")
+        col1, col2 = st.columns([2, 1])
+        with col1:
+            if st.button("📊 Load Sample Inventory Data", type="primary", key="load_sample_inventory"):
+                with st.spinner("Loading sample inventory data..."):
+                    sample_data = self.load_sample_current_inventory()
+                    
+                    # Validate against PFEP
+                    validation_result = self.validate_inventory_against_pfep(sample_data)
+                    
+                    st.session_state.current_inventory = sample_data
+                    st.session_state.inventory_upload_time = datetime.now()
+                    st.session_state.inventory_processed = True
+                    st.session_state.validation_result = validation_result
+                    
+                    st.success(f"✅ Loaded sample inventory data with {len(sample_data)} records!")
                     st.rerun()
     
-    def display_validation_results(self, validation_result):
-        """Display validation results in a user-friendly format"""
-        st.subheader("🔍 Data Validation Results")
+    def display_inventory_analysis_section(self):
+        """Display inventory analysis section with tolerance settings"""
+        st.markdown("---")
+        st.subheader("🔍 Inventory Analysis Settings")
         
-        # Summary metrics
-        col1, col2, col3, col4 = st.columns(4)
+        # Tolerance setting
+        col1, col2, col3 = st.columns([2, 1, 1])
         with col1:
-            st.metric("PFEP Parts", validation_result['pfep_parts_count'])
+            tolerance = st.slider(
+                "Tolerance Percentage (%)",
+                min_value=5,
+                max_value=50,
+                value=st.session_state.user_preferences['default_tolerance'],
+                step=5,
+                help="Percentage variance allowed from PFEP requirements"
+            )
+        
         with col2:
-            st.metric("Inventory Parts", validation_result['inventory_parts_count'])
+            if st.button("🔍 Analyze Inventory", type="primary", key="analyze_inventory"):
+                self.perform_inventory_analysis(tolerance)
+        
         with col3:
-            st.metric("Matching Parts", validation_result['matching_parts_count'])
-        with col4:
-            match_pct = (validation_result['matching_parts_count'] / validation_result['pfep_parts_count']) * 100 if validation_result['pfep_parts_count'] > 0 else 0
-            st.metric("Match %", f"{match_pct:.1f}%")
-        
-        # Issues and warnings
-        if validation_result['issues']:
-            st.error("❌ **Critical Issues Found:**")
-            for issue in validation_result['issues']:
-                st.error(f"• {issue}")
-        
-        if validation_result['warnings']:
-            st.warning("⚠️ **Warnings:**")
-            for warning in validation_result['warnings']:
-                st.warning(f"• {warning}")
-        
-        if validation_result['is_valid'] and not validation_result['warnings']:
-            st.success("✅ **Validation Passed:** All data looks good!")
+            if (hasattr(st.session_state, 'analysis_results') and 
+                st.session_state.analysis_results and
+                not st.session_state.get('inventory_data_locked', False)):
+                
+                if st.button("🔒 Lock Analysis", type="secondary", key="lock_inventory"):
+                    st.session_state.inventory_data_locked = True
+                    st.success("🔒 Analysis locked! Results are now finalized.")
+                    st.rerun()
     
-    def display_analysis_dashboard(self):
-        """Main analysis dashboard for users"""
-        st.header("📊 Inventory Analysis Dashboard")
-        
-        # Analysis controls
-        col1, col2, col3 = st.columns([2, 2, 1])
-        with col1:
-            tolerance = st.selectbox(
-                "Tolerance Level (%)",
-                [10, 20, 30, 40, 50],
-                index=2,
-                help="Parts within this percentage of target are considered 'Within Norms'"
-            )
-        with col2:
-            analysis_type = st.selectbox(
-                "Analysis Type",
-                ["Complete Analysis", "Exception Analysis", "Vendor Analysis"],
-                help="Choose the type of analysis to perform"
-            )
-        with col3:
-            if st.button("🔄 Refresh Analysis", key="refresh_analysis"):
-                st.rerun()
-        
-        # Perform analysis
-        with st.spinner("Analyzing inventory..."):
-            analysis_results = self.analyzer.analyze_inventory(
+    def perform_inventory_analysis(self, tolerance):
+        """Perform comprehensive inventory analysis"""
+        with st.spinner("Analyzing inventory against PFEP requirements..."):
+            results = self.analyzer.analyze_inventory(
                 st.session_state.pfep_data,
                 st.session_state.current_inventory,
                 tolerance
             )
-        
-        if not analysis_results:
-            st.error("❌ No analysis results generated. Please check your data.")
+            
+            st.session_state.analysis_results = results
+            st.session_state.analysis_tolerance = tolerance
+            st.session_state.analysis_time = datetime.now()
+            
+            st.success(f"✅ Analysis completed! Found {len(results)} parts to analyze.")
+            
+            # Display immediate results
+            self.display_analysis_results()
+    
+    def display_analysis_results(self):
+        """Display comprehensive analysis results"""
+        if not hasattr(st.session_state, 'analysis_results') or not st.session_state.analysis_results:
+            st.warning("No analysis results available. Please perform analysis first.")
             return
         
-        # Convert to DataFrame for easier manipulation
-        results_df = pd.DataFrame(analysis_results)
+        results_df = pd.DataFrame(st.session_state.analysis_results)
+        tolerance = st.session_state.get('analysis_tolerance', 30)
         
-        # Display based on analysis type
-        if analysis_type == "Complete Analysis":
-            self.display_complete_analysis(results_df, tolerance)
-        elif analysis_type == "Exception Analysis":
-            self.display_exception_analysis(results_df, tolerance)
-        else:
-            self.display_vendor_analysis(results_df, tolerance)
-    
-    def display_complete_analysis(self, results_df, tolerance):
-        """Display complete inventory analysis"""
-        st.subheader("📋 Complete Inventory Analysis")
+        st.markdown("---")
+        st.subheader(f"📊 Analysis Results (Tolerance: ±{tolerance}%)")
         
         # Summary metrics
+        self.display_summary_metrics(results_df)
+        
+        # Status breakdown
+        self.display_status_breakdown(results_df)
+        
+        # Detailed analysis tabs
+        self.display_detailed_analysis_tabs(results_df)
+    
+    def display_summary_metrics(self, results_df):
+        """Display summary metrics"""
+        col1, col2, col3, col4, col5 = st.columns(5)
+        
         total_parts = len(results_df)
         within_norms = len(results_df[results_df['Status'] == 'Within Norms'])
         excess_inventory = len(results_df[results_df['Status'] == 'Excess Inventory'])
         short_inventory = len(results_df[results_df['Status'] == 'Short Inventory'])
-        total_stock_value = results_df['Stock_Value'].sum()
+        total_value = results_df['Stock_Value'].sum()
         
-        # Display metrics
-        col1, col2, col3, col4, col5 = st.columns(5)
         with col1:
             st.metric("Total Parts", total_parts)
         with col2:
-            st.metric("Within Norms", within_norms, delta=f"{(within_norms/total_parts)*100:.1f}%")
+            st.metric("Within Norms", within_norms, f"{(within_norms/total_parts*100):.1f}%")
         with col3:
-            st.metric("Excess Inventory", excess_inventory, delta=f"{(excess_inventory/total_parts)*100:.1f}%")
+            st.metric("Excess Inventory", excess_inventory, f"{(excess_inventory/total_parts*100):.1f}%")
         with col4:
-            st.metric("Short Inventory", short_inventory, delta=f"{(short_inventory/total_parts)*100:.1f}%")
+            st.metric("Short Inventory", short_inventory, f"{(short_inventory/total_parts*100):.1f}%")
         with col5:
-            st.metric("Total Stock Value", f"₹{total_stock_value:,.0f}")
-        
-        # Status distribution chart
-        st.subheader("📊 Status Distribution")
+            st.metric("Total Stock Value", f"₹{total_value:,.0f}")
+    
+    def display_status_breakdown(self, results_df):
+        """Display status breakdown with charts"""
+        # Status distribution pie chart
         status_counts = results_df['Status'].value_counts()
         
-        col1, col2 = st.columns([2, 1])
+        col1, col2 = st.columns(2)
+        
         with col1:
             fig_pie = px.pie(
                 values=status_counts.values,
                 names=status_counts.index,
                 title="Inventory Status Distribution",
+                color=status_counts.index,
                 color_discrete_map=self.analyzer.status_colors
             )
-            fig_pie.update_traces(textposition='inside', textinfo='percent+label')
             st.plotly_chart(fig_pie, use_container_width=True)
         
         with col2:
-            st.markdown("### Status Summary")
-            for status, count in status_counts.items():
-                percentage = (count / total_parts) * 100
-                color = self.analyzer.status_colors.get(status, '#808080')
-                st.markdown(f"""
-                <div class="status-card status-{status.lower().replace(' ', '-')}">
-                    <strong>{status}</strong><br>
-                    {count} parts ({percentage:.1f}%)
-                </div>
-                """, unsafe_allow_html=True)
+            # Variance distribution
+            fig_hist = px.histogram(
+                results_df,
+                x='Variance_%',
+                nbins=20,
+                title="Variance Distribution (%)",
+                color='Status',
+                color_discrete_map=self.analyzer.status_colors
+            )
+            fig_hist.add_vline(x=0, line_dash="dash", line_color="black", annotation_text="Target")
+            st.plotly_chart(fig_hist, use_container_width=True)
+    
+    def display_detailed_analysis_tabs(self, results_df):
+        """Display detailed analysis in tabs"""
+        tab1, tab2, tab3, tab4 = st.tabs(["📋 All Parts", "🔴 Short Inventory", "🔵 Excess Inventory", "📈 Analytics"])
         
-        # Detailed analysis table
-        st.subheader("📋 Detailed Analysis")
+        with tab1:
+            self.display_all_parts_analysis(results_df)
         
-        # Add filters
+        with tab2:
+            self.display_short_inventory_analysis(results_df)
+        
+        with tab3:
+            self.display_excess_inventory_analysis(results_df)
+        
+        with tab4:
+            self.display_advanced_analytics(results_df)
+    
+    def display_all_parts_analysis(self, results_df):
+        """Display all parts analysis"""
+        st.markdown("### All Parts Analysis")
+        
+        # Filters
         col1, col2, col3 = st.columns(3)
         with col1:
             status_filter = st.multiselect(
                 "Filter by Status",
                 options=results_df['Status'].unique(),
-                default=results_df['Status'].unique()
+                default=results_df['Status'].unique(),
+                key="all_parts_status_filter"
             )
+        
         with col2:
             vendor_filter = st.multiselect(
                 "Filter by Vendor",
                 options=results_df['Vendor'].unique(),
-                default=results_df['Vendor'].unique()
+                default=results_df['Vendor'].unique(),
+                key="all_parts_vendor_filter"
             )
+        
         with col3:
-            variance_threshold = st.slider("Min Variance % (absolute)", 0, 100, 0)
+            min_variance = st.number_input(
+                "Min Variance %",
+                value=float(results_df['Variance_%'].min()),
+                key="all_parts_min_variance"
+            )
         
         # Apply filters
         filtered_df = results_df[
             (results_df['Status'].isin(status_filter)) &
             (results_df['Vendor'].isin(vendor_filter)) &
-            (abs(results_df['Variance_%']) >= variance_threshold)
+            (results_df['Variance_%'] >= min_variance)
         ]
         
-        # Format the dataframe for display
-        display_df = filtered_df.copy()
-        display_df['Variance_%'] = display_df['Variance_%'].round(2)
-        display_df['Stock_Value'] = display_df['Stock_Value'].apply(lambda x: f"₹{x:,.0f}")
+        # Display filtered results
+        st.dataframe(
+            filtered_df[['Material', 'Description', 'QTY', 'RM IN QTY', 'Variance_%', 'Status', 'Vendor']],
+            use_container_width=True,
+            height=400
+        )
         
-        # Color code the status
-        def color_status(val):
-            if val == 'Within Norms':
-                return 'background-color: #e8f5e8'
-            elif val == 'Excess Inventory':
-                return 'background-color: #e3f2fd'
-            else:
-                return 'background-color: #ffebee'
-        
-        styled_df = display_df.style.applymap(color_status, subset=['Status'])
-        st.dataframe(styled_df, use_container_width=True)
-        
-        # Export options
-        st.subheader("📤 Export Options")
-        col1, col2 = st.columns(2)
-        with col1:
-            csv = filtered_df.to_csv(index=False)
-            st.download_button(
-                label="📄 Download CSV",
-                data=csv,
-                file_name=f"inventory_analysis_{datetime.now().strftime('%Y%m%d_%H%M')}.csv",
-                mime="text/csv"
-            )
-        with col2:
-            # Create summary report
-            summary_report = self.generate_summary_report(results_df, tolerance)
-            st.download_button(
-                label="📊 Download Summary Report",
-                data=summary_report,
-                file_name=f"inventory_summary_{datetime.now().strftime('%Y%m%d_%H%M')}.txt",
-                mime="text/plain"
-            )
+        # Download button
+        csv = filtered_df.to_csv(index=False)
+        st.download_button(
+            label="📥 Download Analysis Results",
+            data=csv,
+            file_name=f"inventory_analysis_{datetime.now().strftime('%Y%m%d_%H%M')}.csv",
+            mime="text/csv"
+        )
     
-    def display_exception_analysis(self, results_df, tolerance):
-        """Display exception-only analysis (items outside tolerance)"""
-        st.subheader("⚠️ Exception Analysis")
+    def display_short_inventory_analysis(self, results_df):
+        """Display short inventory analysis"""
+        short_df = results_df[results_df['Status'] == 'Short Inventory'].copy()
         
-        # Filter for exceptions only
-        exceptions_df = results_df[results_df['Status'] != 'Within Norms'].copy()
-        
-        if exceptions_df.empty:
-            st.success("🎉 Congratulations! All items are within tolerance limits.")
+        if short_df.empty:
+            st.success("🎉 No short inventory items found!")
             return
         
-        # Exception metrics
-        total_exceptions = len(exceptions_df)
-        excess_count = len(exceptions_df[exceptions_df['Status'] == 'Excess Inventory'])
-        short_count = len(exceptions_df[exceptions_df['Status'] == 'Short Inventory'])
+        st.markdown(f"### Short Inventory Items ({len(short_df)} parts)")
+        
+        # Sort by most critical (highest negative variance)
+        short_df = short_df.sort_values('Variance_%')
+        
+        # Top 10 most critical
+        st.markdown("#### 🔥 Most Critical Shortages")
+        critical_df = short_df.head(10)
+        
+        for _, row in critical_df.iterrows():
+            with st.container():
+                st.markdown(f"""
+                <div class="status-card status-short">
+                    <strong>{row['Material']}</strong> - {row['Description']}<br>
+                    <strong>Current:</strong> {row['QTY']:.1f} | <strong>Required:</strong> {row['RM IN QTY']:.1f} | 
+                    <strong>Shortage:</strong> {abs(row['Variance_Value']):.1f} ({row['Variance_%']:.1f}%)<br>
+                    <strong>Vendor:</strong> {row['Vendor']} | <strong>Value:</strong> ₹{row['Stock_Value']:,.0f}
+                </div>
+                """, unsafe_allow_html=True)
+        
+        # Chart showing shortage by vendor
+        vendor_shortage = short_df.groupby('Vendor').agg({
+            'Variance_Value': 'sum',
+            'Material': 'count'
+        }).reset_index()
+        vendor_shortage.columns = ['Vendor', 'Total_Shortage', 'Parts_Count']
+        
+        fig_vendor = px.bar(
+            vendor_shortage,
+            x='Vendor',
+            y='Total_Shortage',
+            title="Shortage Quantity by Vendor",
+            color='Parts_Count',
+            text='Parts_Count'
+        )
+        st.plotly_chart(fig_vendor, use_container_width=True)
+        
+        # Full table
+        st.markdown("#### Complete Short Inventory List")
+        st.dataframe(
+            short_df[['Material', 'Description', 'QTY', 'RM IN QTY', 'Variance_%', 'Vendor', 'Stock_Value']],
+            use_container_width=True
+        )
+    
+    def display_excess_inventory_analysis(self, results_df):
+        """Display excess inventory analysis"""
+        excess_df = results_df[results_df['Status'] == 'Excess Inventory'].copy()
+        
+        if excess_df.empty:
+            st.info("No excess inventory items found.")
+            return
+        
+        st.markdown(f"### Excess Inventory Items ({len(excess_df)} parts)")
+        
+        # Sort by highest excess
+        excess_df = excess_df.sort_values('Variance_%', ascending=False)
+        
+        # Calculate potential savings
+        excess_value = excess_df['Stock_Value'].sum()
+        total_excess_qty = excess_df['Variance_Value'].sum()
         
         col1, col2, col3 = st.columns(3)
         with col1:
-            st.metric("Total Exceptions", total_exceptions)
+            st.metric("Excess Parts", len(excess_df))
         with col2:
-            st.metric("Excess Items", excess_count, delta=f"{(excess_count/total_exceptions)*100:.1f}%")
+            st.metric("Excess Quantity", f"{total_excess_qty:.0f}")
         with col3:
-            st.metric("Short Items", short_count, delta=f"{(short_count/total_exceptions)*100:.1f}%")
+            st.metric("Excess Value", f"₹{excess_value:,.0f}")
         
-        # Priority analysis
-        st.subheader("🔥 Priority Actions Required")
+        # Top 10 highest excess
+        st.markdown("#### 💰 Highest Excess Items")
+        top_excess = excess_df.head(10)
         
-        # High variance items (>50% variance)
-        high_variance = exceptions_df[abs(exceptions_df['Variance_%']) > 50]
-        if not high_variance.empty:
-            st.error(f"❗ **Critical:** {len(high_variance)} items with >50% variance")
-            with st.expander("View Critical Items"):
-                st.dataframe(high_variance[['Material', 'Description', 'Status', 'Variance_%', 'Vendor']], 
-                           use_container_width=True)
+        for _, row in top_excess.iterrows():
+            with st.container():
+                st.markdown(f"""
+                <div class="status-card status-excess">
+                    <strong>{row['Material']}</strong> - {row['Description']}<br>
+                    <strong>Current:</strong> {row['QTY']:.1f} | <strong>Required:</strong> {row['RM IN QTY']:.1f} | 
+                    <strong>Excess:</strong> {row['Variance_Value']:.1f} ({row['Variance_%']:.1f}%)<br>
+                    <strong>Vendor:</strong> {row['Vendor']} | <strong>Value:</strong> ₹{row['Stock_Value']:,.0f}
+                </div>
+                """, unsafe_allow_html=True)
         
-        # Medium variance items (25-50% variance)
-        medium_variance = exceptions_df[
-            (abs(exceptions_df['Variance_%']) > 25) & 
-            (abs(exceptions_df['Variance_%']) <= 50)
-        ]
-        if not medium_variance.empty:
-            st.warning(f"⚠️ **High Priority:** {len(medium_variance)} items with 25-50% variance")
-            with st.expander("View High Priority Items"):
-                st.dataframe(medium_variance[['Material', 'Description', 'Status', 'Variance_%', 'Vendor']], 
-                           use_container_width=True)
-        
-        # Variance distribution chart
-        fig_hist = px.histogram(
-            exceptions_df,
-            x='Variance_%',
-            color='Status',
-            title="Exception Variance Distribution",
-            nbins=20,
-            color_discrete_map=self.analyzer.status_colors
-        )
-        st.plotly_chart(fig_hist, use_container_width=True)
-        
-        # Full exceptions table
-        st.subheader("📋 All Exceptions")
-        st.dataframe(exceptions_df, use_container_width=True)
-    
-    def display_vendor_analysis(self, results_df, tolerance):
-        """Display vendor-wise analysis"""
-        st.subheader("🏢 Vendor-wise Analysis")
-        
-        # Vendor summary
-        vendor_summary = results_df.groupby('Vendor').agg({
-            'Material': 'count',
+        # Chart showing excess by vendor
+        vendor_excess = excess_df.groupby('Vendor').agg({
+            'Variance_Value': 'sum',
             'Stock_Value': 'sum',
-            'Variance_%': 'mean',
-            'Status': lambda x: (x == 'Within Norms').sum()
+            'Material': 'count'
+        }).reset_index()
+        
+        fig_excess = px.scatter(
+            vendor_excess,
+            x='Variance_Value',
+            y='Stock_Value',
+            size='Material',
+            color='Vendor',
+            title="Excess Inventory: Quantity vs Value by Vendor",
+            hover_data=['Material']
+        )
+        st.plotly_chart(fig_excess, use_container_width=True)
+        
+        # Full table
+        st.markdown("#### Complete Excess Inventory List")
+        st.dataframe(
+            excess_df[['Material', 'Description', 'QTY', 'RM IN QTY', 'Variance_%', 'Vendor', 'Stock_Value']],
+            use_container_width=True
+        )
+    
+    def display_advanced_analytics(self, results_df):
+        """Display advanced analytics and insights"""
+        st.markdown("### Advanced Analytics & Insights")
+        
+        # Vendor performance analysis
+        st.markdown("#### 🏢 Vendor Performance Analysis")
+        vendor_stats = results_df.groupby('Vendor').agg({
+            'Material': 'count',
+            'QTY': 'sum',
+            'RM IN QTY': 'sum',
+            'Stock_Value': 'sum',
+            'Variance_%': ['mean', 'std']
         }).round(2)
         
-        vendor_summary.columns = ['Total_Parts', 'Total_Stock_Value', 'Avg_Variance_%', 'Within_Norms_Count']
-        vendor_summary['Within_Norms_%'] = (vendor_summary['Within_Norms_Count'] / vendor_summary['Total_Parts'] * 100).round(1)
-        vendor_summary = vendor_summary.reset_index()
+        vendor_stats.columns = ['Parts_Count', 'Current_QTY', 'Required_QTY', 'Total_Value', 'Avg_Variance_%', 'Variance_StdDev']
+        vendor_stats = vendor_stats.reset_index()
         
-        # Display vendor metrics
-        st.subheader("📊 Vendor Performance")
+        # Add performance score
+        vendor_stats['Performance_Score'] = 100 - abs(vendor_stats['Avg_Variance_%'])
         
-        # Vendor performance chart
-        fig_vendor = px.bar(
-            vendor_summary,
-            x='Vendor',
-            y='Within_Norms_%',
-            title="Vendor Performance (% Items Within Norms)",
-            color='Within_Norms_%',
-            color_continuous_scale='RdYlGn'
+        st.dataframe(vendor_stats, use_container_width=True)
+        
+        # Location-wise analysis
+        st.markdown("#### 🗺️ Geographic Distribution")
+        location_stats = results_df.groupby(['State', 'City']).agg({
+            'Material': 'count',
+            'Stock_Value': 'sum',
+            'Variance_%': 'mean'
+        }).reset_index()
+        
+        fig_map = px.scatter(
+            location_stats,
+            x='State',
+            y='Material',
+            size='Stock_Value',
+            color='Variance_%',
+            title="Inventory Distribution by Location",
+            color_continuous_scale='RdYlGn_r'
         )
-        fig_vendor.update_layout(showlegend=False)
-        st.plotly_chart(fig_vendor, use_container_width=True)
+        st.plotly_chart(fig_map, use_container_width=True)
         
-        # Vendor details table
-        st.subheader("📋 Vendor Summary Table")
-        vendor_display = vendor_summary.copy()
-        vendor_display['Total_Stock_Value'] = vendor_display['Total_Stock_Value'].apply(lambda x: f"₹{x:,.0f}")
-        st.dataframe(vendor_display, use_container_width=True)
+        # ABC Analysis simulation
+        st.markdown("#### 📊 ABC Analysis (Value-based)")
+        results_df_sorted = results_df.sort_values('Stock_Value', ascending=False)
+        results_df_sorted['Cum_Value'] = results_df_sorted['Stock_Value'].cumsum()
+        results_df_sorted['Cum_Value_%'] = (results_df_sorted['Cum_Value'] / results_df_sorted['Stock_Value'].sum()) * 100
         
-        # Individual vendor analysis
-        st.subheader("🔍 Individual Vendor Analysis")
-        selected_vendor = st.selectbox("Select Vendor for Detailed Analysis", vendor_summary['Vendor'].unique())
+        # Classify into ABC categories
+        results_df_sorted['ABC_Category'] = 'C'
+        results_df_sorted.loc[results_df_sorted['Cum_Value_%'] <= 80, 'ABC_Category'] = 'A'
+        results_df_sorted.loc[(results_df_sorted['Cum_Value_%'] > 80) & (results_df_sorted['Cum_Value_%'] <= 95), 'ABC_Category'] = 'B'
         
-        if selected_vendor:
-            vendor_data = results_df[results_df['Vendor'] == selected_vendor]
-            
-            col1, col2, col3 = st.columns(3)
-            with col1:
-                st.metric("Total Parts", len(vendor_data))
-            with col2:
-                within_norms_pct = (vendor_data['Status'] == 'Within Norms').sum() / len(vendor_data) * 100
-                st.metric("Within Norms %", f"{within_norms_pct:.1f}%")
-            with col3:
-                avg_variance = vendor_data['Variance_%'].mean()
-                st.metric("Avg Variance %", f"{avg_variance:.1f}%")
-            
-            # Vendor specific status distribution
-            vendor_status = vendor_data['Status'].value_counts()
-            fig_vendor_pie = px.pie(
-                values=vendor_status.values,
-                names=vendor_status.index,
-                title=f"Status Distribution - {selected_vendor}",
-                color_discrete_map=self.analyzer.status_colors
-            )
-            st.plotly_chart(fig_vendor_pie, use_container_width=True)
-            
-            # Vendor parts details
-            st.dataframe(vendor_data, use_container_width=True)
-    
-    def generate_summary_report(self, results_df, tolerance):
-        """Generate a text summary report"""
-        total_parts = len(results_df)
-        within_norms = len(results_df[results_df['Status'] == 'Within Norms'])
-        excess_inventory = len(results_df[results_df['Status'] == 'Excess Inventory'])
-        short_inventory = len(results_df[results_df['Status'] == 'Short Inventory'])
-        total_stock_value = results_df['Stock_Value'].sum()
+        abc_summary = results_df_sorted.groupby('ABC_Category').agg({
+            'Material': 'count',
+            'Stock_Value': 'sum'
+        }).reset_index()
         
-        report = f"""
-INVENTORY ANALYSIS SUMMARY REPORT
-Generated on: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
-Tolerance Level: ±{tolerance}%
-
-=== OVERVIEW ===
-Total Parts Analyzed: {total_parts}
-Total Stock Value: ₹{total_stock_value:,.0f}
-
-=== STATUS DISTRIBUTION ===
-Within Norms: {within_norms} ({(within_norms/total_parts)*100:.1f}%)
-Excess Inventory: {excess_inventory} ({(excess_inventory/total_parts)*100:.1f}%)
-Short Inventory: {short_inventory} ({(short_inventory/total_parts)*100:.1f}%)
-
-=== KEY INSIGHTS ===
-"""
-        
-        # Add insights based on data
-        if within_norms / total_parts >= 0.8:
-            report += "✅ Inventory management is performing well with 80%+ items within norms.\n"
-        elif within_norms / total_parts >= 0.6:
-            report += "⚠️ Inventory management needs attention with 60-80% items within norms.\n"
-        else:
-            report += "❌ Inventory management requires immediate action with <60% items within norms.\n"
-        
-        if excess_inventory > short_inventory:
-            report += "📈 Excess inventory is the primary concern - consider reducing procurement.\n"
-        elif short_inventory > excess_inventory:
-            report += "📉 Stock shortages are the primary concern - consider increasing procurement.\n"
-        else:
-            report += "⚖️ Excess and shortage issues are balanced.\n"
-        
-        # Vendor insights
-        vendor_performance = results_df.groupby('Vendor').agg({
-            'Status': lambda x: (x == 'Within Norms').sum() / len(x) * 100
-        }).round(1)
-        
-        best_vendor = vendor_performance.idxmax().iloc[0]
-        worst_vendor = vendor_performance.idxmin().iloc[0]
-        
-        report += f"\n=== VENDOR PERFORMANCE ===\n"
-        report += f"Best Performing Vendor: {best_vendor} ({vendor_performance.loc[best_vendor].iloc[0]:.1f}% within norms)\n"
-        report += f"Needs Improvement: {worst_vendor} ({vendor_performance.loc[worst_vendor].iloc[0]:.1f}% within norms)\n"
-        
-        return report
+        fig_abc = px.bar(
+            abc_summary,
+            x='ABC_Category',
+            y='Stock_Value',
+            title="ABC Analysis - Value Distribution",
+            text='Material',
+            color='ABC_Category'
+        )
+        st.plotly_chart(fig_abc, use_container_width=True)
     
     def run(self):
         """Main application runner"""
-        # App header
-        st.title("📊 Advanced Inventory Management System")
+        # Page header
+        st.title("📊 Inventory Management System")
         st.markdown("**Comprehensive PFEP-based Inventory Analysis Platform**")
         
         # Authentication
         self.authenticate_user()
         
         if st.session_state.user_role is None:
-            st.info("👋 Welcome! Please select your role and login to continue.")
-            
-            # Add some helpful information
-            with st.expander("ℹ️ How to use this system"):
-                st.markdown("""
-                **For Admins:**
-                1. Login with admin credentials or use demo mode
-                2. Upload or load PFEP master data
-                3. Lock the data for user access
-                
-                **For Users:**
-                1. Enter as user (no password required)
-                2. Upload current inventory data
-                3. Analyze inventory against PFEP requirements
-                
-                **Features:**
-                - Complete inventory analysis with tolerance settings
-                - Exception reporting for items outside norms
-                - Vendor-wise performance analysis
-                - Export capabilities for reports
-                """)
+            st.info("👋 Welcome! Please login to access the inventory management system.")
+            st.markdown("""
+            ### Features:
+            - **Admin**: Upload and manage PFEP master data
+            - **User**: Upload inventory data and perform analysis
+            - **Analytics**: Comprehensive inventory variance analysis
+            - **Reports**: Detailed insights and recommendations
+            """)
             return
         
-        # Role-based interface
+        # Main application logic based on user role
         if st.session_state.user_role == "Admin":
             self.admin_data_management()
         else:
             self.user_inventory_management()
 
-# Initialize and run the application
+# Run the application
 if __name__ == "__main__":
     app = InventoryManagementSystem()
     app.run()
