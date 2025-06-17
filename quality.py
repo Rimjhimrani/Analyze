@@ -1306,7 +1306,7 @@ class EnhancedPFEPInventoryAnalyzer:
 # Main execution
 if __name__ == "__main__":
     try:
-        analyzer = PFEPInventoryAnalyzer()
+        analyzer = EnhancedPFEPInventoryAnalyzer()
         analyzer.run_analysis()
     except Exception as e:
         st.error(f"❌ Application Error: {str(e)}")
