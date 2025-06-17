@@ -3,7 +3,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
 import numpy as np
-from datetime import datetime
+from datetime import datetime, timedelta
 import io
 import base64
 from matplotlib.figure import Figure
@@ -11,6 +11,11 @@ import plotly.express as px
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 import hashlib
+import logging
+
+# Set up logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 # Set page config
 st.set_page_config(
@@ -20,7 +25,7 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Custom CSS for better styling
+# Enhanced CSS for better styling
 st.markdown("""
 <style>
     .main-header {
@@ -29,67 +34,97 @@ st.markdown("""
         color: #1f77b4;
         text-align: center;
         margin-bottom: 2rem;
+        text-shadow: 2px 2px 4px rgba(0,0,0,0.1);
     }
     .metric-card {
-        background-color: #f0f2f6;
-        padding: 1rem;
-        border-radius: 0.5rem;
-        border-left: 4px solid #1f77b4;
+        background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+        padding: 1.5rem;
+        border-radius: 1rem;
+        border-left: 5px solid #1f77b4;
         margin: 0.5rem 0;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        transition: transform 0.2s ease;
+    }
+    .metric-card:hover {
+        transform: translateY(-2px);
     }
     .status-excess {
         border-left-color: #007bff !important;
+        background: linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%);
     }
     .status-short {
         border-left-color: #dc3545 !important;
+        background: linear-gradient(135deg, #ffebee 0%, #ffcdd2 100%);
     }
     .status-normal {
         border-left-color: #28a745 !important;
+        background: linear-gradient(135deg, #e8f5e8 0%, #c8e6c9 100%);
     }
     .status-total {
         border-left-color: #6c757d !important;
+        background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
     }
     .admin-section {
-        background-color: #fff3cd;
-        padding: 1rem;
-        border-radius: 0.5rem;
-        border: 1px solid #ffeaa7;
+        background: linear-gradient(135deg, #fff8e1 0%, #ffecb3 100%);
+        padding: 1.5rem;
+        border-radius: 1rem;
+        border: 2px solid #ffd54f;
         margin: 1rem 0;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.1);
     }
     .user-section {
-        background-color: #e8f4fd;
-        padding: 1rem;
-        border-radius: 0.5rem;
-        border: 1px solid #bee5eb;
+        background: linear-gradient(135deg, #e1f5fe 0%, #b3e5fc 100%);
+        padding: 1.5rem;
+        border-radius: 1rem;
+        border: 2px solid #4fc3f7;
         margin: 1rem 0;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.1);
     }
     .pfep-info {
-        background-color: #d4edda;
+        background: linear-gradient(135deg, #e8f5e8 0%, #c8e6c9 100%);
         padding: 1rem;
-        border-radius: 0.5rem;
-        border: 1px solid #c3e6cb;
+        border-radius: 0.8rem;
+        border: 2px solid #81c784;
         margin: 1rem 0;
     }
     .error-box {
-        background-color: #f8d7da;
+        background: linear-gradient(135deg, #ffebee 0%, #ffcdd2 100%);
         padding: 1rem;
-        border-radius: 0.5rem;
-        border: 1px solid #f5c6cb;
+        border-radius: 0.8rem;
+        border: 2px solid #e57373;
         margin: 1rem 0;
     }
     .graph-description {
-        background-color: #f8f9fa;
-        padding: 0.8rem;
-        border-radius: 0.3rem;
-        border-left: 3px solid #007bff;
+        background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+        padding: 1rem;
+        border-radius: 0.5rem;
+        border-left: 4px solid #007bff;
         margin-bottom: 1rem;
         font-size: 0.9rem;
         color: #495057;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    .alert-section {
+        background: linear-gradient(135deg, #fff3cd 0%, #ffeaa7 100%);
+        padding: 1rem;
+        border-radius: 0.8rem;
+        border: 2px solid #ffcd39;
+        margin: 1rem 0;
+    }
+    .success-section {
+        background: linear-gradient(135deg, #d4edda 0%, #c3e6cb 100%);
+        padding: 1rem;
+        border-radius: 0.8rem;
+        border: 2px solid #28a745;
+        margin: 1rem 0;
+    }
+    .sidebar .element-container {
+        margin-bottom: 1rem;
     }
 </style>
 """, unsafe_allow_html=True)
 
-class PFEPInventoryAnalyzer:
+class EnhancedPFEPInventoryAnalyzer:
     def __init__(self):
         self.status_colors = {
             'Within Norms': '#28a745',      # Green
@@ -104,66 +139,102 @@ class PFEPInventoryAnalyzer:
             st.session_state.user_role = None
         if 'matched_data' not in st.session_state:
             st.session_state.matched_data = None
+        if 'analysis_history' not in st.session_state:
+            st.session_state.analysis_history = []
+        if 'pfep_upload_time' not in st.session_state:
+            st.session_state.pfep_upload_time = None
+        if 'user_preferences' not in st.session_state:
+            st.session_state.user_preferences = {
+                'default_tolerance': 30,
+                'chart_theme': 'plotly',
+                'auto_refresh': False
+            }
     
     def authenticate_user(self):
-        """Simple authentication system"""
-        st.sidebar.header("🔐 Authentication")
+        """Enhanced authentication system with better UX"""
+        st.sidebar.markdown("### 🔐 Authentication")
         
         if st.session_state.user_role is None:
-            role = st.sidebar.selectbox("Select Role", ["Select Role", "Admin", "User"])
+            role = st.sidebar.selectbox(
+                "Select Role", 
+                ["Select Role", "Admin", "User"],
+                help="Choose your role to access appropriate features"
+            )
             
             if role == "Admin":
-                password = st.sidebar.text_input("Admin Password", type="password")
-                if password == "Agilomatrix@1234":  # Simple password - replace with secure authentication
-                    st.session_state.user_role = "Admin"
-                    st.sidebar.success("✅ Admin authenticated!")
-                    st.rerun()
-                elif password:
-                    st.sidebar.error("❌ Invalid admin password")
+                with st.sidebar.container():
+                    st.markdown("**Admin Login**")
+                    password = st.text_input("Admin Password", type="password", key="admin_pass")
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        if st.button("🔑 Login", key="admin_login"):
+                            if password == "Agilomatrix@1234":
+                                st.session_state.user_role = "Admin"
+                                st.success("✅ Admin authenticated!")
+                                st.rerun()
+                            else:
+                                st.error("❌ Invalid password")
+                    with col2:
+                        if st.button("🏠 Demo", key="admin_demo"):
+                            st.session_state.user_role = "Admin"
+                            st.info("🎮 Demo mode activated!")
+                            st.rerun()
             
             elif role == "User":
-                st.session_state.user_role = "User"
-                st.sidebar.success("✅ User access granted!")
-                st.rerun()
+                if st.sidebar.button("👤 Enter as User", key="user_login"):
+                    st.session_state.user_role = "User"
+                    st.sidebar.success("✅ User access granted!")
+                    st.rerun()
         else:
-            st.sidebar.success(f"✅ Logged in as: {st.session_state.user_role}")
-            if st.sidebar.button("🚪 Logout"):
-                st.session_state.user_role = None
-                st.session_state.pfep_data = None
-                st.session_state.matched_data = None
+            # User info and logout
+            st.sidebar.success(f"✅ **{st.session_state.user_role}** logged in")
+            
+            # User preferences (for Admin only)
+            if st.session_state.user_role == "Admin":
+                with st.sidebar.expander("⚙️ Preferences"):
+                    st.session_state.user_preferences['default_tolerance'] = st.selectbox(
+                        "Default Tolerance", [10, 20, 30, 40, 50], 
+                        index=2, key="pref_tolerance"
+                    )
+                    st.session_state.user_preferences['chart_theme'] = st.selectbox(
+                        "Chart Theme", ['plotly', 'plotly_white', 'plotly_dark'],
+                        key="pref_theme"
+                    )
+            
+            if st.sidebar.button("🚪 Logout", key="logout_btn"):
+                # Clear all session data
+                for key in list(st.session_state.keys()):
+                    del st.session_state[key]
                 st.rerun()
     
     def safe_float_convert(self, value):
-        """Safely convert string to float, handling commas and other formatting"""
+        """Enhanced safe float conversion with better error handling"""
         if pd.isna(value) or value == '' or value is None:
             return 0.0
         
-        str_value = str(value).strip()
-        str_value = str_value.replace(',', '').replace(' ', '')
-        
-        if str_value.endswith('%'):
-            str_value = str_value[:-1]
-        
         try:
+            str_value = str(value).strip()
+            # Remove common formatting
+            str_value = str_value.replace(',', '').replace(' ', '').replace('₹', '').replace('$', '')
+            
+            if str_value.endswith('%'):
+                str_value = str_value[:-1]
+            
+            # Handle negative values in parentheses
+            if str_value.startswith('(') and str_value.endswith(')'):
+                str_value = '-' + str_value[1:-1]
+            
             return float(str_value)
-        except (ValueError, TypeError):
+        except (ValueError, TypeError) as e:
+            logger.warning(f"Failed to convert '{value}' to float: {e}")
             return 0.0
     
     def safe_int_convert(self, value):
-        """Safely convert string to int, handling commas and other formatting"""
-        if pd.isna(value) or value == '' or value is None:
-            return 0
-        
-        str_value = str(value).strip()
-        str_value = str_value.replace(',', '').replace(' ', '')
-        
-        try:
-            return int(float(str_value))
-        except (ValueError, TypeError):
-            return 0
+        """Enhanced safe int conversion"""
+        return int(self.safe_float_convert(value))
     
     def load_sample_pfep_data(self):
-        """Load sample PFEP master data for demonstration"""
+        """Load enhanced sample PFEP master data"""
         pfep_sample = [
             ["AC0303020106", "FLAT ALUMINIUM PROFILE", 4.000, "V001", "Vendor_A", "Mumbai", "Maharashtra"],
             ["AC0303020105", "RAIN GUTTER PROFILE", 6.000, "V002", "Vendor_B", "Delhi", "Delhi"],
@@ -199,10 +270,11 @@ class PFEPInventoryAnalyzer:
                 'State': row[6]
             })
         
+        st.session_state.pfep_upload_time = datetime.now()
         return pfep_data
     
     def load_sample_current_inventory(self):
-        """Load sample current inventory data for demonstration"""
+        """Load enhanced sample current inventory data with more realistic variances"""
         current_sample = [
             ["AC0303020106", "FLAT ALUMINIUM PROFILE", 5.230, 496],
             ["AC0303020105", "RAIN GUTTER PROFILE", 8.360, 1984],
@@ -226,163 +298,234 @@ class PFEPInventoryAnalyzer:
             ["JJ1010101010", "WINDSHIELD WASHER", 33, 495]
         ]
         
-        current_data = []
-        for row in current_sample:
-            current_data.append({
-                'Part_No': row[0],
-                'Description': row[1],
-                'Current_QTY': self.safe_float_convert(row[2]),
-                'Stock_Value': self.safe_int_convert(row[3])
-            })
+        return [{'Part_No': row[0], 'Description': row[1], 
+                'Current_QTY': self.safe_float_convert(row[2]), 
+                'Stock_Value': self.safe_int_convert(row[3])} for row in current_sample]
+    
+    def validate_file_format(self, df, file_type="unknown"):
+        """Validate uploaded file format and provide feedback"""
+        if df is None or df.empty:
+            return False, "File is empty or could not be read"
         
-        return current_data
+        if df.shape[0] == 0:
+            return False, "No data rows found in file"
+        
+        if df.shape[1] < 2:
+            return False, "File must have at least 2 columns"
+        
+        # Check for common issues
+        issues = []
+        
+        # Check for completely empty columns
+        empty_cols = df.columns[df.isnull().all()].tolist()
+        if empty_cols:
+            issues.append(f"Empty columns found: {empty_cols}")
+        
+        # Check data quality
+        if df.isnull().sum().sum() > (df.shape[0] * df.shape[1] * 0.5):
+            issues.append("More than 50% of data is missing")
+        
+        if issues:
+            return False, "Data quality issues: " + "; ".join(issues)
+        
+        return True, "File format validated successfully"
     
     def standardize_pfep_data(self, df):
-        """Standardize PFEP master data"""
+        """Enhanced PFEP data standardization with better error handling"""
         if df is None or df.empty:
             return []
         
-        # Find required columns (case insensitive)
-        part_columns = ['part_no', 'part_number', 'material', 'material_code', 'item_code', 'code']
-        desc_columns = ['description', 'item_description', 'part_description', 'desc', 'part description', 'material_description']
-        rm_columns = ['rm_in_qty', 'rm_qty', 'required_qty', 'norm_qty', 'target_qty', 'rm', 'ri_in_qty']
-        vendor_code_columns = ['vendor_code', 'vendor_id', 'supplier_code', 'supplier_id']
-        vendor_name_columns = ['vendor_name', 'vendor', 'supplier_name', 'supplier']
-        city_columns = ['city', 'vendor_city', 'supplier_city']
-        state_columns = ['state', 'vendor_state', 'supplier_state']
+        # Validate file
+        is_valid, message = self.validate_file_format(df, "PFEP")
+        if not is_valid:
+            st.error(f"❌ PFEP File Validation Error: {message}")
+            return []
         
-        # Get column names (case insensitive)
-        available_columns = {k.lower().replace(' ', '_'): k for k in df.columns}
+        # Column mapping with more variations
+        column_mappings = {
+            'part_no': ['part_no', 'part_number', 'material', 'material_code', 'item_code', 'code', 'part no', 'partno'],
+            'description': ['description', 'item_description', 'part_description', 'desc', 'part description', 'material_description', 'item desc'],
+            'rm_qty': ['rm_in_qty', 'rm_qty', 'required_qty', 'norm_qty', 'target_qty', 'rm', 'ri_in_qty', 'rm in qty'],
+            'vendor_code': ['vendor_code', 'vendor_id', 'supplier_code', 'supplier_id', 'vendor id'],
+            'vendor_name': ['vendor_name', 'vendor', 'supplier_name', 'supplier', 'vendor name'],
+            'city': ['city', 'vendor_city', 'supplier_city', 'location'],
+            'state': ['state', 'vendor_state', 'supplier_state', 'region']
+        }
         
-        # Find the best matching columns
-        def find_column(column_list):
-            for col_name in column_list:
-                if col_name in available_columns:
-                    return available_columns[col_name]
+        # Normalize column names
+        normalized_columns = {col.lower().strip().replace(' ', '_').replace('-', '_'): col for col in df.columns}
+        
+        # Find best matching columns
+        def find_best_column(possible_names):
+            for name in possible_names:
+                normalized_name = name.lower().strip().replace(' ', '_').replace('-', '_')
+                if normalized_name in normalized_columns:
+                    return normalized_columns[normalized_name]
             return None
         
-        part_col = find_column(part_columns)
-        desc_col = find_column(desc_columns)
-        rm_col = find_column(rm_columns)
-        vendor_code_col = find_column(vendor_code_columns)
-        vendor_name_col = find_column(vendor_name_columns)
-        city_col = find_column(city_columns)
-        state_col = find_column(state_columns)
+        mapped_columns = {}
+        for key, possible_names in column_mappings.items():
+            mapped_columns[key] = find_best_column(possible_names)
         
-        if not part_col:
-            st.error("Part Number column not found in PFEP file")
+        # Check required columns
+        missing_required = []
+        if not mapped_columns['part_no']:
+            missing_required.append('Part Number')
+        if not mapped_columns['rm_qty']:
+            missing_required.append('RM IN QTY')
+        
+        if missing_required:
+            st.error(f"❌ Required columns not found: {', '.join(missing_required)}")
             return []
         
-        if not rm_col:
-            st.error("RM IN QTY column not found in PFEP file")
-            return []
-        
-        # Process each record
+        # Process data
         standardized_data = []
-        for _, record in df.iterrows():
+        skipped_rows = 0
+        
+        for idx, record in df.iterrows():
             try:
-                part_no = str(record.get(part_col, '')).strip()
-                rm_qty = self.safe_float_convert(record.get(rm_col, 0))
+                part_no = str(record.get(mapped_columns['part_no'], '')).strip()
+                rm_qty = self.safe_float_convert(record.get(mapped_columns['rm_qty'], 0))
                 
-                if part_no and part_no.lower() != 'nan' and rm_qty >= 0:
+                if part_no and part_no.lower() not in ['nan', '', 'null'] and rm_qty >= 0:
                     item = {
                         'Part_No': part_no,
-                        'Description': str(record.get(desc_col, '')).strip() if desc_col else '',
+                        'Description': str(record.get(mapped_columns['description'], '')).strip() if mapped_columns['description'] else '',
                         'RM_IN_QTY': rm_qty,
-                        'Vendor_Code': str(record.get(vendor_code_col, '')).strip() if vendor_code_col else '',
-                        'Vendor_Name': str(record.get(vendor_name_col, '')).strip() if vendor_name_col else '',
-                        'City': str(record.get(city_col, '')).strip() if city_col else '',
-                        'State': str(record.get(state_col, '')).strip() if state_col else ''
+                        'Vendor_Code': str(record.get(mapped_columns['vendor_code'], '')).strip() if mapped_columns['vendor_code'] else '',
+                        'Vendor_Name': str(record.get(mapped_columns['vendor_name'], '')).strip() if mapped_columns['vendor_name'] else '',
+                        'City': str(record.get(mapped_columns['city'], '')).strip() if mapped_columns['city'] else '',
+                        'State': str(record.get(mapped_columns['state'], '')).strip() if mapped_columns['state'] else ''
                     }
                     standardized_data.append(item)
+                else:
+                    skipped_rows += 1
                     
             except Exception as e:
-                continue
+                skipped_rows += 1
+                logger.warning(f"Error processing row {idx}: {e}")
         
+        if skipped_rows > 0:
+            st.warning(f"⚠️ Skipped {skipped_rows} rows due to data issues")
+        
+        st.session_state.pfep_upload_time = datetime.now()
         return standardized_data
     
     def standardize_current_inventory(self, df):
-        """Standardize current inventory data"""
+        """Enhanced current inventory standardization"""
         if df is None or df.empty:
             return []
         
-        # Find required columns (case insensitive)
-        part_columns = ['part_no', 'part_number', 'material', 'material_code', 'item_code', 'code']
-        desc_columns = ['description', 'item_description', 'part_description', 'desc', 'part description', 'material_description']
-        qty_columns = ['current_qty', 'qty', 'quantity', 'stock_qty', 'on_hand_qty']
-        value_columns = ['stock_value', 'value', 'amount', 'cost', 'inventory_value']
+        # Validate file
+        is_valid, message = self.validate_file_format(df, "Current Inventory")
+        if not is_valid:
+            st.error(f"❌ Current Inventory File Validation Error: {message}")
+            return []
         
-        # Get column names (case insensitive)
-        available_columns = {k.lower().replace(' ', '_'): k for k in df.columns}
+        # Column mapping
+        column_mappings = {
+            'part_no': ['part_no', 'part_number', 'material', 'material_code', 'item_code', 'code', 'part no', 'partno'],
+            'description': ['description', 'item_description', 'part_description', 'desc', 'part description', 'material_description'],
+            'current_qty': ['current_qty', 'qty', 'quantity', 'stock_qty', 'on_hand_qty', 'current quantity', 'current qty'],
+            'stock_value': ['stock_value', 'value', 'amount', 'cost', 'inventory_value', 'total_value', 'stock value']
+        }
         
-        # Find the best matching columns
-        def find_column(column_list):
-            for col_name in column_list:
-                if col_name in available_columns:
-                    return available_columns[col_name]
+        # Normalize and find columns
+        normalized_columns = {col.lower().strip().replace(' ', '_').replace('-', '_'): col for col in df.columns}
+        
+        def find_best_column(possible_names):
+            for name in possible_names:
+                normalized_name = name.lower().strip().replace(' ', '_').replace('-', '_')
+                if normalized_name in normalized_columns:
+                    return normalized_columns[normalized_name]
             return None
         
-        part_col = find_column(part_columns)
-        desc_col = find_column(desc_columns)
-        qty_col = find_column(qty_columns)
-        value_col = find_column(value_columns)
+        mapped_columns = {}
+        for key, possible_names in column_mappings.items():
+            mapped_columns[key] = find_best_column(possible_names)
         
-        if not part_col:
-            st.error("Part Number column not found in Current Inventory file")
+        # Check required columns
+        missing_required = []
+        if not mapped_columns['part_no']:
+            missing_required.append('Part Number')
+        if not mapped_columns['current_qty']:
+            missing_required.append('Current QTY')
+        
+        if missing_required:
+            st.error(f"❌ Required columns not found: {', '.join(missing_required)}")
             return []
         
-        if not qty_col:
-            st.error("Current QTY column not found in Current Inventory file")
-            return []
-        
-        # Process each record
+        # Process data
         standardized_data = []
-        for _, record in df.iterrows():
+        skipped_rows = 0
+        
+        for idx, record in df.iterrows():
             try:
-                part_no = str(record.get(part_col, '')).strip()
-                current_qty = self.safe_float_convert(record.get(qty_col, 0))
+                part_no = str(record.get(mapped_columns['part_no'], '')).strip()
+                current_qty = self.safe_float_convert(record.get(mapped_columns['current_qty'], 0))
                 
-                if part_no and part_no.lower() != 'nan' and current_qty >= 0:
+                if part_no and part_no.lower() not in ['nan', '', 'null'] and current_qty >= 0:
                     item = {
                         'Part_No': part_no,
-                        'Description': str(record.get(desc_col, '')).strip() if desc_col else '',
+                        'Description': str(record.get(mapped_columns['description'], '')).strip() if mapped_columns['description'] else '',
                         'Current_QTY': current_qty,
-                        'Stock_Value': self.safe_int_convert(record.get(value_col, 0)) if value_col else 0
+                        'Stock_Value': self.safe_int_convert(record.get(mapped_columns['stock_value'], 0)) if mapped_columns['stock_value'] else 0
                     }
                     standardized_data.append(item)
+                else:
+                    skipped_rows += 1
                     
             except Exception as e:
-                continue
+                skipped_rows += 1
+                logger.warning(f"Error processing row {idx}: {e}")
+        
+        if skipped_rows > 0:
+            st.warning(f"⚠️ Skipped {skipped_rows} rows due to data issues")
         
         return standardized_data
     
     def match_inventory_data(self, pfep_data, current_data):
-        """Match current inventory with PFEP master data"""
+        """Enhanced matching algorithm with fuzzy matching option"""
         matched_data = []
         unmatched_parts = []
         
-        # Create lookup dictionary for PFEP data
+        # Create comprehensive lookup
         pfep_lookup = {}
-        for pfep_item in pfep_data:
-            key = (pfep_item['Part_No'].upper(), pfep_item['Description'].upper())
-            pfep_lookup[key] = pfep_item
+        pfep_by_part_no = {}
         
-        # Match current inventory with PFEP
+        for pfep_item in pfep_data:
+            part_no = pfep_item['Part_No'].upper().strip()
+            desc = pfep_item['Description'].upper().strip()
+            
+            # Exact match key
+            exact_key = (part_no, desc)
+            pfep_lookup[exact_key] = pfep_item
+            
+            # Part number only lookup
+            pfep_by_part_no[part_no] = pfep_item
+        
+        # Match current inventory
+        match_stats = {'exact': 0, 'part_only': 0, 'no_match': 0}
+        
         for current_item in current_data:
-            part_key = (current_item['Part_No'].upper(), current_item['Description'].upper())
-            part_key_no_desc = (current_item['Part_No'].upper(), "")
+            current_part_no = current_item['Part_No'].upper().strip()
+            current_desc = current_item['Description'].upper().strip()
             
             pfep_match = None
+            match_type = None
             
-            # Try exact match first (Part No + Description)
-            if part_key in pfep_lookup:
-                pfep_match = pfep_lookup[part_key]
-            else:
-                # Try Part No only match
-                for pfep_key, pfep_item in pfep_lookup.items():
-                    if pfep_key[0] == current_item['Part_No'].upper():
-                        pfep_match = pfep_item
-                        break
+            # Try exact match first
+            exact_key = (current_part_no, current_desc)
+            if exact_key in pfep_lookup:
+                pfep_match = pfep_lookup[exact_key]
+                match_type = 'exact'
+                match_stats['exact'] += 1
+            
+            # Try part number only match
+            elif current_part_no in pfep_by_part_no:
+                pfep_match = pfep_by_part_no[current_part_no]
+                match_type = 'part_only'
+                match_stats['part_only'] += 1
             
             if pfep_match:
                 matched_item = {
@@ -394,51 +537,68 @@ class PFEPInventoryAnalyzer:
                     'Vendor_Code': pfep_match['Vendor_Code'],
                     'Vendor_Name': pfep_match['Vendor_Name'],
                     'City': pfep_match['City'],
-                    'State': pfep_match['State']
+                    'State': pfep_match['State'],
+                    'Match_Type': match_type
                 }
                 matched_data.append(matched_item)
             else:
                 unmatched_parts.append(current_item)
+                match_stats['no_match'] += 1
         
-        return matched_data, unmatched_parts
+        return matched_data, unmatched_parts, match_stats
     
     def calculate_variance(self, current_qty, rm_qty):
-        """Calculate variance percentage and absolute value"""
+        """Enhanced variance calculation with additional metrics"""
         if rm_qty == 0:
-            return 0, 0
+            return {'percent': 0, 'absolute': 0, 'ratio': 1}
         
         variance_percent = ((current_qty - rm_qty) / rm_qty) * 100
-        variance_value = current_qty - rm_qty
-        return variance_percent, variance_value
+        variance_absolute = current_qty - rm_qty
+        variance_ratio = current_qty / rm_qty if rm_qty != 0 else 1
+        
+        return {
+            'percent': variance_percent,
+            'absolute': variance_absolute,
+            'ratio': variance_ratio
+        }
     
-    def determine_status(self, variance_percent, tolerance):
-        """Determine inventory status based on variance and tolerance"""
-        if abs(variance_percent) <= tolerance:
+    def determine_status(self, variance_percent, tolerance=30):
+        """Enhanced status determination with severity levels"""
+        abs_variance = abs(variance_percent)
+        
+        if abs_variance <= tolerance:
             return 'Within Norms'
         elif variance_percent > tolerance:
+            if variance_percent >= tolerance * 2:
+                return 'Excess Inventory'  # Could add severity levels here
             return 'Excess Inventory'
         else:
+            if abs_variance >= tolerance * 2:
+                return 'Short Inventory'  # Could add severity levels here
             return 'Short Inventory'
     
     def process_matched_data(self, matched_data, tolerance):
-        """Process matched data and calculate analysis"""
+        """Enhanced data processing with additional analytics"""
         processed_data = []
         summary_data = {
-            'Within Norms': {'count': 0, 'value': 0},
-            'Excess Inventory': {'count': 0, 'value': 0},
-            'Short Inventory': {'count': 0, 'value': 0}
+            'Within Norms': {'count': 0, 'value': 0, 'qty_variance': 0},
+            'Excess Inventory': {'count': 0, 'value': 0, 'qty_variance': 0},
+            'Short Inventory': {'count': 0, 'value': 0, 'qty_variance': 0}
         }
+        
+        total_rm_qty = sum(item['RM_IN_QTY'] for item in matched_data)
+        total_current_qty = sum(item['Current_QTY'] for item in matched_data)
         
         for item in matched_data:
             current_qty = item['Current_QTY']
             rm_qty = item['RM_IN_QTY']
             stock_value = item['Stock_Value']
             
-            # Calculate variance
-            variance_percent, variance_value = self.calculate_variance(current_qty, rm_qty)
+            # Calculate enhanced variance
+            variance = self.calculate_variance(current_qty, rm_qty)
             
             # Determine status
-            status = self.determine_status(variance_percent, tolerance)
+            status = self.determine_status(variance['percent'], tolerance)
             
             # Store processed data
             processed_item = {
@@ -446,589 +606,708 @@ class PFEPInventoryAnalyzer:
                 'Description': item['Description'],
                 'Current_QTY': current_qty,
                 'RM_IN_QTY': rm_qty,
-                'Variance_%': variance_percent,
-                'Variance_Value': variance_value,
+                'Variance_Percent': variance['percent'],
+                'Variance_Absolute': variance['absolute'],
+                'Variance_Ratio': variance['ratio'],
                 'Status': status,
                 'Stock_Value': stock_value,
                 'Vendor_Code': item['Vendor_Code'],
                 'Vendor_Name': item['Vendor_Name'],
                 'City': item['City'],
-                'State': item['State']
+                'State': item['State'],
+                'Match_Type': item.get('Match_Type', 'unknown')
             }
             processed_data.append(processed_item)
             
-            # Update summary
+            # Update summary statistics
             summary_data[status]['count'] += 1
             summary_data[status]['value'] += stock_value
+            summary_data[status]['qty_variance'] += variance['absolute']
         
-        return processed_data, summary_data
+        # Calculate overall metrics
+        overall_metrics = {
+            'total_parts': len(processed_data),
+            'total_rm_qty': total_rm_qty,
+            'total_current_qty': total_current_qty,
+            'overall_variance_percent': ((total_current_qty - total_rm_qty) / total_rm_qty * 100) if total_rm_qty > 0 else 0,
+            'total_stock_value': sum(item['Stock_Value'] for item in processed_data),
+            'avg_variance': sum(item['Variance_Percent'] for item in processed_data) / len(processed_data) if processed_data else 0
+        }
+        
+        return processed_data, summary_data, overall_metrics
     
-    def get_vendor_summary(self, processed_data):
-        """Get summary data by vendor"""
-        vendor_summary = {}
+    def generate_detailed_report(self, processed_data, summary_data, overall_metrics):
+        """Generate comprehensive analysis report"""
+        report = {
+            'timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            'summary': {
+                'total_parts_analyzed': overall_metrics['total_parts'],
+                'total_stock_value': overall_metrics['total_stock_value'],
+                'overall_variance_percent': overall_metrics['overall_variance_percent'],
+                'average_variance': overall_metrics['avg_variance']
+            },
+            'status_breakdown': {},
+            'vendor_analysis': {},
+            'location_analysis': {},
+            'top_issues': {
+                'highest_excess': [],
+                'highest_shortage': [],
+                'highest_value_variance': []
+            }
+        }
         
+        # Status breakdown
+        for status, data in summary_data.items():
+            report['status_breakdown'][status] = {
+                'count': data['count'],
+                'percentage': (data['count'] / overall_metrics['total_parts'] * 100) if overall_metrics['total_parts'] > 0 else 0,
+                'total_value': data['value'],
+                'avg_variance': data['qty_variance'] / data['count'] if data['count'] > 0 else 0
+            }
+        
+        # Vendor analysis
+        vendor_stats = {}
         for item in processed_data:
-            vendor = item['Vendor_Name']
-            if vendor not in vendor_summary:
-                vendor_summary[vendor] = {
-                    'vendor_code': item['Vendor_Code'],
-                    'city': item['City'],
-                    'state': item['State'],
+            vendor = item['Vendor_Name'] or item['Vendor_Code']
+            if vendor not in vendor_stats:
+                vendor_stats[vendor] = {
                     'total_parts': 0,
-                    'total_current_qty': 0,
-                    'total_rm_qty': 0,
                     'total_value': 0,
-                    'short_parts': 0,
-                    'excess_parts': 0,
-                    'normal_parts': 0,
-                    'short_value': 0,
-                    'excess_value': 0,
-                    'normal_value': 0
+                    'statuses': {'Within Norms': 0, 'Excess Inventory': 0, 'Short Inventory': 0}
                 }
             
-            vendor_summary[vendor]['total_parts'] += 1
-            vendor_summary[vendor]['total_current_qty'] += item['Current_QTY']
-            vendor_summary[vendor]['total_rm_qty'] += item['RM_IN_QTY']
-            vendor_summary[vendor]['total_value'] += item['Stock_Value']
+            vendor_stats[vendor]['total_parts'] += 1
+            vendor_stats[vendor]['total_value'] += item['Stock_Value']
+            vendor_stats[vendor]['statuses'][item['Status']] += 1
+        
+        report['vendor_analysis'] = vendor_stats
+        
+        # Location analysis
+        location_stats = {}
+        for item in processed_data:
+            location = f"{item['City']}, {item['State']}" if item['City'] and item['State'] else "Unknown"
+            if location not in location_stats:
+                location_stats[location] = {
+                    'total_parts': 0,
+                    'total_value': 0,
+                    'statuses': {'Within Norms': 0, 'Excess Inventory': 0, 'Short Inventory': 0}
+                }
             
-            if item['Status'] == 'Short Inventory':
-                vendor_summary[vendor]['short_parts'] += 1
-                vendor_summary[vendor]['short_value'] += item['Stock_Value']
-            elif item['Status'] == 'Excess Inventory':
-                vendor_summary[vendor]['excess_parts'] += 1
-                vendor_summary[vendor]['excess_value'] += item['Stock_Value']
-            else:
-                vendor_summary[vendor]['normal_parts'] += 1
-                vendor_summary[vendor]['normal_value'] += item['Stock_Value']
+            location_stats[location]['total_parts'] += 1
+            location_stats[location]['total_value'] += item['Stock_Value']
+            location_stats[location]['statuses'][item['Status']] += 1
         
-        return vendor_summary
+        report['location_analysis'] = location_stats
+        
+        # Top issues
+        sorted_data = sorted(processed_data, key=lambda x: x['Variance_Percent'], reverse=True)
+        
+        # Highest excess (positive variance)
+        excess_items = [item for item in sorted_data if item['Variance_Percent'] > 0][:10]
+        report['top_issues']['highest_excess'] = excess_items
+        
+        # Highest shortage (negative variance)
+        shortage_items = sorted([item for item in processed_data if item['Variance_Percent'] < 0], 
+                               key=lambda x: x['Variance_Percent'])[:10]
+        report['top_issues']['highest_shortage'] = shortage_items
+        
+        # Highest value variance
+        value_variance_items = sorted(processed_data, 
+                                    key=lambda x: abs(x['Variance_Absolute'] * x['Stock_Value']), 
+                                    reverse=True)[:10]
+        report['top_issues']['highest_value_variance'] = value_variance_items
+        
+        return report
     
-    def admin_interface(self):
-        """Admin interface for PFEP management"""
-        st.markdown('<div class="admin-section">🔑 <strong>Admin Panel</strong> - PFEP Master Data Management</div>', unsafe_allow_html=True)
+    def create_enhanced_visualizations(self, processed_data, summary_data, overall_metrics):
+        """Create comprehensive visualizations with Plotly"""
         
-        st.subheader("📋 PFEP Master Data Management")
-        
-        # PFEP file upload
-        uploaded_pfep = st.file_uploader(
-            "Upload PFEP Master File",
-            type=['csv', 'xlsx', 'xls'],
-            help="Upload PFEP file with columns: Part No, Description, RM IN QTY, Vendor Code, Vendor Name, City, State",
-            key="pfep_upload"
+        # 1. Status Distribution Pie Chart
+        fig_status = px.pie(
+            values=[data['count'] for data in summary_data.values()],
+            names=list(summary_data.keys()),
+            title="Inventory Status Distribution",
+            color_discrete_map=self.status_colors,
+            hole=0.4
+        )
+        fig_status.update_traces(
+            textposition='inside', 
+            textinfo='percent+label',
+            hovertemplate='<b>%{label}</b><br>Count: %{value}<br>Percentage: %{percent}<extra></extra>'
+        )
+        fig_status.update_layout(
+            template=st.session_state.user_preferences.get('chart_theme', 'plotly'),
+            height=400,
+            showlegend=True
         )
         
-        if uploaded_pfep is not None:
-            try:
-                if uploaded_pfep.name.endswith('.csv'):
-                    df = pd.read_csv(uploaded_pfep)
-                else:
-                    df = pd.read_excel(uploaded_pfep)
-                
-                pfep_data = self.standardize_pfep_data(df)
-                
-                if pfep_data:
-                    st.session_state.pfep_data = pfep_data
-                    st.success(f"✅ PFEP Master Data loaded successfully! {len(pfep_data)} parts found.")
-                    
-                    # Display PFEP summary
-                    st.subheader("📊 PFEP Master Data Summary")
-                    pfep_df = pd.DataFrame(pfep_data)
-                    st.dataframe(pfep_df.head(10), use_container_width=True)
-                    
-                    if len(pfep_data) > 10:
-                        st.info(f"Showing first 10 rows. Total rows: {len(pfep_data)}")
-                else:
-                    st.error("❌ No valid PFEP data found in uploaded file")
-            
-            except Exception as e:
-                st.error(f"❌ Error loading PFEP file: {str(e)}")
+        # 2. Variance Distribution Histogram
+        fig_variance = px.histogram(
+            x=[item['Variance_Percent'] for item in processed_data],
+            nbins=30,
+            title="Variance Distribution",
+            labels={'x': 'Variance Percentage', 'y': 'Count'},
+            color_discrete_sequence=['#1f77b4']
+        )
+        fig_variance.add_vline(x=0, line_dash="dash", line_color="red", annotation_text="Target")
+        fig_variance.update_layout(
+            template=st.session_state.user_preferences.get('chart_theme', 'plotly'),
+            height=400
+        )
         
-        elif st.session_state.pfep_data is None:
-            if st.button("📋 Load Sample PFEP Data (for demonstration)"):
-                st.session_state.pfep_data = self.load_sample_pfep_data()
-                st.success("✅ Sample PFEP data loaded!")
-                st.rerun()
+        # 3. Vendor Analysis Bar Chart
+        vendor_data = {}
+        for item in processed_data:
+            vendor = item['Vendor_Name'] or item['Vendor_Code'] or 'Unknown'
+            if vendor not in vendor_data:
+                vendor_data[vendor] = {'Within Norms': 0, 'Excess Inventory': 0, 'Short Inventory': 0}
+            vendor_data[vendor][item['Status']] += 1
         
-        # Display current PFEP status
-        if st.session_state.pfep_data:
-            st.markdown('<div class="pfep-info">✅ <strong>PFEP Master Data Status:</strong> Active with {} parts</div>'.format(len(st.session_state.pfep_data)), unsafe_allow_html=True)
-            
-            # PFEP Statistics
-            vendors = set(item['Vendor_Name'] for item in st.session_state.pfep_data if item['Vendor_Name'])
-            cities = set(item['City'] for item in st.session_state.pfep_data if item['City'])
-            states = set(item['State'] for item in st.session_state.pfep_data if item['State'])
-            
-            col1, col2, col3, col4 = st.columns(4)
-            with col1:
-                st.metric("Total Parts", len(st.session_state.pfep_data))
-            with col2:
-                st.metric("Unique Vendors", len(vendors))
-            with col3:
-                st.metric("Cities", len(cities))
-            with col4:
-                st.metric("States", len(states))
+        vendors = list(vendor_data.keys())[:10]  # Top 10 vendors
+        fig_vendor = go.Figure()
+        
+        for status in ['Within Norms', 'Excess Inventory', 'Short Inventory']:
+            fig_vendor.add_trace(go.Bar(
+                name=status,
+                x=vendors,
+                y=[vendor_data[vendor][status] for vendor in vendors],
+                marker_color=self.status_colors[status]
+            ))
+        
+        fig_vendor.update_layout(
+            title="Inventory Status by Vendor (Top 10)",
+            xaxis_title="Vendor",
+            yaxis_title="Count",
+            barmode='stack',
+            template=st.session_state.user_preferences.get('chart_theme', 'plotly'),
+            height=500
+        )
+        
+        # 4. Value vs Variance Scatter
+        fig_scatter = px.scatter(
+            x=[item['Variance_Percent'] for item in processed_data],
+            y=[item['Stock_Value'] for item in processed_data],
+            color=[item['Status'] for item in processed_data],
+            title="Stock Value vs Variance Percentage",
+            labels={'x': 'Variance Percentage', 'y': 'Stock Value'},
+            color_discrete_map=self.status_colors,
+            hover_data=['Part_No', 'Description']
+        )
+        fig_scatter.add_vline(x=0, line_dash="dash", line_color="gray", annotation_text="Target")
+        fig_scatter.update_layout(
+            template=st.session_state.user_preferences.get('chart_theme', 'plotly'),
+            height=500
+        )
+        
+        # 5. Location Analysis
+        location_data = {}
+        for item in processed_data:
+            location = item['State'] or 'Unknown'
+            if location not in location_data:
+                location_data[location] = {'Within Norms': 0, 'Excess Inventory': 0, 'Short Inventory': 0}
+            location_data[location][item['Status']] += 1
+        
+        locations = list(location_data.keys())
+        fig_location = go.Figure()
+        
+        for status in ['Within Norms', 'Excess Inventory', 'Short Inventory']:
+            fig_location.add_trace(go.Bar(
+                name=status,
+                x=locations,
+                y=[location_data[location][status] for location in locations],
+                marker_color=self.status_colors[status]
+            ))
+        
+        fig_location.update_layout(
+            title="Inventory Status by State",
+            xaxis_title="State",
+            yaxis_title="Count",
+            barmode='stack',
+            template=st.session_state.user_preferences.get('chart_theme', 'plotly'),
+            height=400
+        )
+        
+        return {
+            'status_distribution': fig_status,
+            'variance_histogram': fig_variance,
+            'vendor_analysis': fig_vendor,
+            'value_variance_scatter': fig_scatter,
+            'location_analysis': fig_location
+        }
     
-    def user_interface(self):
-        """User interface for inventory analysis"""
-        st.markdown('<div class="user-section">👤 <strong>User Panel</strong> - Current Inventory Analysis</div>', unsafe_allow_html=True)
+    def display_enhanced_metrics(self, summary_data, overall_metrics):
+        """Display enhanced metrics cards"""
+        col1, col2, col3, col4 = st.columns(4)
         
-        # Check if PFEP data is available
-        if st.session_state.pfep_data is None:
-            st.markdown('<div class="error-box">❌ <strong>PFEP Master Data Required:</strong> Admin must upload PFEP master data first before inventory analysis can be performed.</div>', unsafe_allow_html=True)
+        with col1:
+            st.markdown(f"""
+            <div class="metric-card status-total">
+                <h3>📊 Total Parts</h3>
+                <h2>{overall_metrics['total_parts']:,}</h2>
+                <p>Analyzed Items</p>
+            </div>
+            """, unsafe_allow_html=True)
+        
+        with col2:
+            st.markdown(f"""
+            <div class="metric-card status-normal">
+                <h3>✅ Within Norms</h3>
+                <h2>{summary_data['Within Norms']['count']:,}</h2>
+                <p>{(summary_data['Within Norms']['count']/overall_metrics['total_parts']*100):.1f}% of total</p>
+            </div>
+            """, unsafe_allow_html=True)
+        
+        with col3:
+            st.markdown(f"""
+            <div class="metric-card status-excess">
+                <h3>📈 Excess</h3>
+                <h2>{summary_data['Excess Inventory']['count']:,}</h2>
+                <p>{(summary_data['Excess Inventory']['count']/overall_metrics['total_parts']*100):.1f}% of total</p>
+            </div>
+            """, unsafe_allow_html=True)
+        
+        with col4:
+            st.markdown(f"""
+            <div class="metric-card status-short">
+                <h3>📉 Short</h3>
+                <h2>{summary_data['Short Inventory']['count']:,}</h2>
+                <p>{(summary_data['Short Inventory']['count']/overall_metrics['total_parts']*100):.1f}% of total</p>
+            </div>
+            """, unsafe_allow_html=True)
+        
+        # Additional metrics row
+        col5, col6, col7, col8 = st.columns(4)
+        
+        with col5:
+            st.markdown(f"""
+            <div class="metric-card">
+                <h3>💰 Total Value</h3>
+                <h2>₹{overall_metrics['total_stock_value']:,.0f}</h2>
+                <p>Stock Value</p>
+            </div>
+            """, unsafe_allow_html=True)
+        
+        with col6:
+            variance_color = "status-excess" if overall_metrics['overall_variance_percent'] > 0 else "status-short"
+            st.markdown(f"""
+            <div class="metric-card {variance_color}">
+                <h3>📊 Overall Variance</h3>
+                <h2>{overall_metrics['overall_variance_percent']:+.1f}%</h2>
+                <p>From Target</p>
+            </div>
+            """, unsafe_allow_html=True)
+        
+        with col7:
+            st.markdown(f"""
+            <div class="metric-card">
+                <h3>📋 Target Qty</h3>
+                <h2>{overall_metrics['total_rm_qty']:,.0f}</h2>
+                <p>PFEP Target</p>
+            </div>
+            """, unsafe_allow_html=True)
+        
+        with col8:
+            st.markdown(f"""
+            <div class="metric-card">
+                <h3>📦 Current Qty</h3>
+                <h2>{overall_metrics['total_current_qty']:,.0f}</h2>
+                <p>Actual Stock</p>
+            </div>
+            """, unsafe_allow_html=True)
+    
+    def display_data_table(self, processed_data, show_filters=True):
+        """Display enhanced data table with filtering options"""
+        if not processed_data:
+            st.warning("⚠️ No data available to display")
             return
         
-        st.markdown('<div class="pfep-info">✅ <strong>PFEP Master Data Available:</strong> {} parts loaded</div>'.format(len(st.session_state.pfep_data)), unsafe_allow_html=True)
+        df = pd.DataFrame(processed_data)
         
-        # Tolerance setting
-        tolerance = st.selectbox(
-            "Select Tolerance Zone (+/-)",
-            options=[10, 20, 30, 40, 50],
-            index=2,  # Default to 30%
-            format_func=lambda x: f"{x}%"
-        )
-        
-        # Current inventory upload
-        uploaded_current = st.file_uploader(
-            "Upload Current Inventory File",
-            type=['csv', 'xlsx', 'xls'],
-            help="Upload current inventory file with columns: Part No, Description, Current QTY, Stock Value",
-            key="current_upload"
-        )
-        
-        current_data = None
-        
-        if uploaded_current is not None:
-            try:
-                if uploaded_current.name.endswith('.csv'):
-                    df = pd.read_csv(uploaded_current)
-                else:
-                    df = pd.read_excel(uploaded_current)
-                
-                current_data = self.standardize_current_inventory(df)
-                
-                if current_data:
-                    st.success(f"✅ Current inventory loaded successfully! {len(current_data)} parts found.")
-                else:
-                    st.error("❌ No valid current inventory data found in uploaded file")
+        if show_filters:
+            st.markdown("### 🔍 Filter Options")
+            col1, col2, col3 = st.columns(3)
             
-            except Exception as e:
-                st.error(f"❌ Error loading current inventory file: {str(e)}")
+            with col1:
+                status_filter = st.multiselect(
+                    "Filter by Status",
+                    options=df['Status'].unique(),
+                    default=df['Status'].unique(),
+                    key="status_filter"
+                )
+            
+            with col2:
+                vendor_filter = st.multiselect(
+                    "Filter by Vendor",
+                    options=df['Vendor_Name'].unique(),
+                    default=df['Vendor_Name'].unique(),
+                    key="vendor_filter"
+                )
+            
+            with col3:
+                variance_range = st.slider(
+                    "Variance Range (%)",
+                    min_value=float(df['Variance_Percent'].min()),
+                    max_value=float(df['Variance_Percent'].max()),
+                    value=(float(df['Variance_Percent'].min()), float(df['Variance_Percent'].max())),
+                    key="variance_range"
+                )
+            
+            # Apply filters
+            filtered_df = df[
+                (df['Status'].isin(status_filter)) &
+                (df['Vendor_Name'].isin(vendor_filter)) &
+                (df['Variance_Percent'] >= variance_range[0]) &
+                (df['Variance_Percent'] <= variance_range[1])
+            ]
         else:
-            if st.button("📋 Load Sample Current Inventory (for demonstration)"):
-                current_data = self.load_sample_current_inventory()
-                st.success("✅ Sample current inventory loaded!")
+            filtered_df = df
         
-        # Perform matching and analysis
-        if current_data:
-            matched_data, unmatched_parts = self.match_inventory_data(st.session_state.pfep_data, current_data)
+        # Format display columns
+        display_df = filtered_df.copy()
+        display_df['Variance_Percent'] = display_df['Variance_Percent'].round(2)
+        display_df['Stock_Value'] = display_df['Stock_Value'].apply(lambda x: f"₹{x:,.0f}")
+        display_df['Current_QTY'] = display_df['Current_QTY'].round(2)
+        display_df['RM_IN_QTY'] = display_df['RM_IN_QTY'].round(2)
+        
+        # Color code the status
+        def highlight_status(row):
+            if row['Status'] == 'Excess Inventory':
+                return ['background-color: #cce5ff'] * len(row)
+            elif row['Status'] == 'Short Inventory':
+                return ['background-color: #ffcccc'] * len(row)
+            elif row['Status'] == 'Within Norms':
+                return ['background-color: #ccffcc'] * len(row)
+            else:
+                return [''] * len(row)
+        
+        st.markdown(f"### 📋 Detailed Analysis Results ({len(filtered_df)} items)")
+        
+        # Display summary of filtered data
+        if show_filters and len(filtered_df) != len(df):
+            st.info(f"Showing {len(filtered_df)} of {len(df)} total items")
+        
+        # Display the styled dataframe
+        styled_df = display_df.style.apply(highlight_status, axis=1)
+        st.dataframe(styled_df, use_container_width=True, height=400)
+        
+        # Export options
+        if st.session_state.user_role == "Admin":
+            col1, col2 = st.columns(2)
+            with col1:
+                csv_data = filtered_df.to_csv(index=False)
+                st.download_button(
+                    label="📥 Download CSV",
+                    data=csv_data,
+                    file_name=f"pfep_analysis_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+                    mime="text/csv",
+                    key="download_csv"
+                )
             
-            if matched_data:
-                st.session_state.matched_data = matched_data
+            with col2:
+                excel_buffer = io.BytesIO()
+                with pd.ExcelWriter(excel_buffer, engine='openpyxl') as writer:
+                    filtered_df.to_excel(writer, index=False, sheet_name='PFEP Analysis')
                 
-                # Display matching summary
-                col1, col2, col3 = st.columns(3)
-                with col1:
-                    st.metric("📊 Total Current Parts", len(current_data))
-                with col2:
-                    st.metric("✅ Matched Parts", len(matched_data))
-                with col3:
-                    st.metric("❌ Unmatched Parts", len(unmatched_parts))
-                
-                if unmatched_parts:
-                    with st.expander("🔍 View Unmatched Parts"):
-                        unmatched_df = pd.DataFrame(unmatched_parts)
-                        st.dataframe(unmatched_df, use_container_width=True)
-                        st.warning("These parts were  not found in PFEP master data and will be excluded from analysis.")
-                
-                # Process matched data for analysis
-                processed_data, summary_data = self.process_matched_data(matched_data, tolerance)
-                
-                # Display analysis results
-                st.subheader("📊 Inventory Analysis Results")
-                
-                # Summary cards
-                total_parts = len(processed_data)
-                total_value = sum(item['Stock_Value'] for item in processed_data)
-                
-                col1, col2, col3, col4 = st.columns(4)
-                
-                with col1:
-                    st.markdown(f'''
-                    <div class="metric-card status-total">
-                        <h3>Total Parts</h3>
-                        <h2>{total_parts}</h2>
-                        <p>Value: ₹{total_value:,.0f}</p>
-                    </div>
-                    ''', unsafe_allow_html=True)
-                
-                with col2:
-                    normal_count = summary_data['Within Norms']['count']
-                    normal_value = summary_data['Within Norms']['value']
-                    st.markdown(f'''
-                    <div class="metric-card status-normal">
-                        <h3>Within Norms</h3>
-                        <h2>{normal_count}</h2>
-                        <p>Value: ₹{normal_value:,.0f}</p>
-                    </div>
-                    ''', unsafe_allow_html=True)
-                
-                with col3:
-                    excess_count = summary_data['Excess Inventory']['count']
-                    excess_value = summary_data['Excess Inventory']['value']
-                    st.markdown(f'''
-                    <div class="metric-card status-excess">
-                        <h3>Excess Inventory</h3>
-                        <h2>{excess_count}</h2>
-                        <p>Value: ₹{excess_value:,.0f}</p>
-                    </div>
-                    ''', unsafe_allow_html=True)
-                
-                with col4:
-                    short_count = summary_data['Short Inventory']['count']
-                    short_value = summary_data['Short Inventory']['value']
-                    st.markdown(f'''
-                    <div class="metric-card status-short">
-                        <h3>Short Inventory</h3>
-                        <h2>{short_count}</h2>
-                        <p>Value: ₹{short_value:,.0f}</p>
-                    </div>
-                    ''', unsafe_allow_html=True)
-                
-                # Generate and display charts
-                self.display_charts(processed_data, summary_data)
-                
-                # Detailed analysis table
-                st.subheader("📋 Detailed Analysis")
-                
-                # Filter options
-                col1, col2, col3 = st.columns(3)
-                with col1:
-                    status_filter = st.selectbox(
-                        "Filter by Status",
-                        options=['All'] + list(self.status_colors.keys())
-                    )
-                
-                with col2:
-                    vendors = sorted(set(item['Vendor_Name'] for item in processed_data if item['Vendor_Name']))
-                    vendor_filter = st.selectbox(
-                        "Filter by Vendor",
-                        options=['All'] + vendors
-                    )
-                
-                with col3:
-                    sort_by = st.selectbox(
-                        "Sort by",
-                        options=['Part_No', 'Variance_%', 'Stock_Value', 'Current_QTY']
-                    )
-                
-                # Apply filters
-                filtered_data = processed_data.copy()
-                
-                if status_filter != 'All':
-                    filtered_data = [item for item in filtered_data if item['Status'] == status_filter]
-                
-                if vendor_filter != 'All':
-                    filtered_data = [item for item in filtered_data if item['Vendor_Name'] == vendor_filter]
-                
-                # Sort data
-                if sort_by == 'Variance_%':
-                    filtered_data = sorted(filtered_data, key=lambda x: abs(x['Variance_%']), reverse=True)
-                else:
-                    filtered_data = sorted(filtered_data, key=lambda x: x[sort_by], reverse=True)
-                
-                # Display filtered data
-                if filtered_data:
-                    df_display = pd.DataFrame(filtered_data)
-                    
-                    # Format columns for better display
-                    df_display['Variance_%'] = df_display['Variance_%'].apply(lambda x: f"{x:.1f}%")
-                    df_display['Current_QTY'] = df_display['Current_QTY'].apply(lambda x: f"{x:.2f}")
-                    df_display['RM_IN_QTY'] = df_display['RM_IN_QTY'].apply(lambda x: f"{x:.2f}")
-                    df_display['Stock_Value'] = df_display['Stock_Value'].apply(lambda x: f"₹{x:,.0f}")
-                    
-                    st.dataframe(
-                        df_display,
-                        use_container_width=True,
-                        column_config={
-                            "Status": st.column_config.TextColumn(
-                                width="small"
-                            )
-                        }
-                    )
-                    
-                    # Export functionality
-                    if st.button("📥 Export Analysis to Excel"):
-                        self.export_to_excel(processed_data)
-                
-                else:
-                    st.info("No data matches the selected filters.")
-                
-                # Vendor-wise summary
-                self.display_vendor_summary(processed_data)
+                st.download_button(
+                    label="📊 Download Excel",
+                    data=excel_buffer.getvalue(),
+                    file_name=f"pfep_analysis_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    key="download_excel"
+                )
     
-    def display_charts(self, processed_data, summary_data):
-        """Display various charts for inventory analysis"""
-        st.subheader("📈 Visual Analytics")
-        
-        # Status distribution chart
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            st.markdown('<div class="graph-description">📊 <strong>Inventory Status Distribution</strong><br>Shows the count and value distribution across different inventory statuses</div>', unsafe_allow_html=True)
-            
-            # Pie chart for status distribution by count
-            labels = list(summary_data.keys())
-            counts = [summary_data[status]['count'] for status in labels]
-            colors = [self.status_colors[status] for status in labels]
-            
-            fig = go.Figure(data=[go.Pie(
-                labels=labels,
-                values=counts,
-                hole=.3,
-                marker_colors=colors,
-                textinfo='label+percent+value',
-                textposition='auto'
-            )])
-            
-            fig.update_layout(
-                title="Status Distribution (Count)",
-                showlegend=True,
-                height=400
-            )
-            
-            st.plotly_chart(fig, use_container_width=True)
-        
-        with col2:
-            st.markdown('<div class="graph-description">💰 <strong>Value Distribution by Status</strong><br>Shows the monetary value distribution across different inventory statuses</div>', unsafe_allow_html=True)
-            
-            # Bar chart for value distribution
-            values = [summary_data[status]['value'] for status in labels]
-            
-            fig = go.Figure(data=[go.Bar(
-                x=labels,
-                y=values,
-                marker_color=colors,
-                text=[f"₹{v:,.0f}" for v in values],
-                textposition='auto'
-            )])
-            
-            fig.update_layout(
-                title="Value Distribution by Status",
-                xaxis_title="Status",
-                yaxis_title="Value (₹)",
-                height=400
-            )
-            
-            st.plotly_chart(fig, use_container_width=True)
-        
-        # Variance analysis
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            st.markdown('<div class="graph-description">📊 <strong>Variance Distribution</strong><br>Histogram showing the distribution of variance percentages across all parts</div>', unsafe_allow_html=True)
-            
-            variances = [item['Variance_%'] for item in processed_data]
-            
-            fig = go.Figure(data=[go.Histogram(
-                x=variances,
-                nbinsx=20,
-                marker_color='lightblue',
-                opacity=0.7
-            )])
-            
-            fig.update_layout(
-                title="Variance Distribution",
-                xaxis_title="Variance (%)",
-                yaxis_title="Frequency",
-                height=400
-            )
-            
-            st.plotly_chart(fig, use_container_width=True)
-        
-        with col2:
-            st.markdown('<div class="graph-description">🎯 <strong>Top 10 High Variance Parts</strong><br>Parts with highest absolute variance (positive or negative)</div>', unsafe_allow_html=True)
-            
-            # Top variance parts
-            sorted_by_variance = sorted(processed_data, key=lambda x: abs(x['Variance_%']), reverse=True)[:10]
-            
-            part_names = [item['Part_No'][:15] + "..." if len(item['Part_No']) > 15 else item['Part_No'] for item in sorted_by_variance]
-            variance_values = [item['Variance_%'] for item in sorted_by_variance]
-            colors_var = ['red' if v < 0 else 'blue' if v > 0 else 'green' for v in variance_values]
-            
-            fig = go.Figure(data=[go.Bar(
-                x=variance_values,
-                y=part_names,
-                orientation='h',
-                marker_color=colors_var,
-                text=[f"{v:.1f}%" for v in variance_values],
-                textposition='auto'
-            )])
-            
-            fig.update_layout(
-                title="Top 10 High Variance Parts",
-                xaxis_title="Variance (%)",
-                yaxis_title="Part Number",
-                height=400
-            )
-            
-            st.plotly_chart(fig, use_container_width=True)
-        
-        # Vendor-wise analysis
-        vendor_summary = self.get_vendor_summary(processed_data)
-        
-        if len(vendor_summary) > 1:
-            st.markdown('<div class="graph-description">🏭 <strong>Vendor Performance Analysis</strong><br>Comparison of inventory status across different vendors</div>', unsafe_allow_html=True)
-            
-            vendors = list(vendor_summary.keys())
-            short_counts = [vendor_summary[v]['short_parts'] for v in vendors]
-            excess_counts = [vendor_summary[v]['excess_parts'] for v in vendors]
-            normal_counts = [vendor_summary[v]['normal_parts'] for v in vendors]
-            
-            fig = go.Figure(data=[
-                go.Bar(name='Short Inventory', x=vendors, y=short_counts, marker_color='#dc3545'),
-                go.Bar(name='Excess Inventory', x=vendors, y=excess_counts, marker_color='#007bff'),
-                go.Bar(name='Within Norms', x=vendors, y=normal_counts, marker_color='#28a745')
-            ])
-            
-            fig.update_layout(
-                title="Vendor-wise Inventory Status",
-                xaxis_title="Vendor",
-                yaxis_title="Number of Parts",
-                barmode='stack',
-                height=400
-            )
-            
-            st.plotly_chart(fig, use_container_width=True)
-    
-    def display_vendor_summary(self, processed_data):
-        """Display vendor-wise summary"""
-        st.subheader("🏭 Vendor-wise Analysis")
-        
-        vendor_summary = self.get_vendor_summary(processed_data)
-        
-        if vendor_summary:
-            # Create vendor summary dataframe
-            vendor_df_data = []
-            for vendor, data in vendor_summary.items():
-                vendor_df_data.append({
-                    'Vendor_Name': vendor,
-                    'Vendor_Code': data['vendor_code'],
-                    'City': data['city'],
-                    'State': data['state'],
-                    'Total_Parts': data['total_parts'],
-                    'Short_Parts': data['short_parts'],
-                    'Excess_Parts': data['excess_parts'],
-                    'Normal_Parts': data['normal_parts'],
-                    'Total_Value': data['total_value'],
-                    'Short_Value': data['short_value'],
-                    'Excess_Value': data['excess_value'],
-                    'Normal_Value': data['normal_value']
-                })
-            
-            vendor_df = pd.DataFrame(vendor_df_data)
-            
-            # Format values for display
-            vendor_df['Total_Value'] = vendor_df['Total_Value'].apply(lambda x: f"₹{x:,.0f}")
-            vendor_df['Short_Value'] = vendor_df['Short_Value'].apply(lambda x: f"₹{x:,.0f}")
-            vendor_df['Excess_Value'] = vendor_df['Excess_Value'].apply(lambda x: f"₹{x:,.0f}")
-            vendor_df['Normal_Value'] = vendor_df['Normal_Value'].apply(lambda x: f"₹{x:,.0f}")
-            
-            st.dataframe(vendor_df, use_container_width=True)
-    
-    def export_to_excel(self, processed_data):
-        """Export analysis results to Excel"""
-        try:
-            # Create Excel file in memory
-            output = io.BytesIO()
-            
-            with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-                # Main analysis sheet
-                df = pd.DataFrame(processed_data)
-                df.to_excel(writer, sheet_name='Inventory_Analysis', index=False)
-                
-                # Vendor summary sheet
-                vendor_summary = self.get_vendor_summary(processed_data)
-                vendor_df_data = []
-                for vendor, data in vendor_summary.items():
-                    vendor_df_data.append({
-                        'Vendor_Name': vendor,
-                        'Vendor_Code': data['vendor_code'],
-                        'City': data['city'],
-                        'State': data['state'],
-                        'Total_Parts': data['total_parts'],
-                        'Short_Parts': data['short_parts'],
-                        'Excess_Parts': data['excess_parts'],
-                        'Normal_Parts': data['normal_parts'],
-                        'Total_Value': data['total_value'],
-                        'Short_Value': data['short_value'],
-                        'Excess_Value': data['excess_value'],
-                        'Normal_Value': data['normal_value']
-                    })
-                
-                vendor_df = pd.DataFrame(vendor_df_data)
-                vendor_df.to_excel(writer, sheet_name='Vendor_Summary', index=False)
-            
-            # Download button
-            output.seek(0)
-            st.download_button(
-                label="📥 Download Excel Report",
-                data=output.getvalue(),
-                file_name=f"inventory_analysis_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-            )
-            
-            st.success("✅ Excel report generated successfully!")
-            
-        except Exception as e:
-            st.error(f"❌ Error generating Excel report: {str(e)}")
-    
-    def run(self):
-        """Main application runner"""
-        # Header
-        st.markdown('<h1 class="main-header">📊 PFEP-Based Inventory Analysis System</h1>', unsafe_allow_html=True)
+    def run_analysis(self):
+        """Main analysis workflow"""
+        st.markdown('<div class="main-header">🏭 PFEP-Based Inventory Analysis System</div>', unsafe_allow_html=True)
         
         # Authentication
         self.authenticate_user()
         
         if st.session_state.user_role is None:
-            st.info("👆 Please authenticate using the sidebar to access the system.")
-            
-            # System information
-            st.subheader("ℹ️ System Information")
-            st.markdown("""
-            **PFEP-Based Inventory Analysis System** helps organizations analyze their current inventory against PFEP (Plan for Every Part) norms.
-            
-            **Features:**
-            - 🔐 **Role-based Access**: Admin and User roles with different permissions
-            - 📋 **PFEP Master Data Management**: Admin can upload and manage PFEP master data
-            - 📊 **Inventory Analysis**: Users can analyze current inventory against PFEP norms
-            - 📈 **Visual Analytics**: Interactive charts and graphs for better insights
-            - 🏭 **Vendor Analysis**: Vendor-wise performance tracking
-            - 📥 **Export Functionality**: Export analysis results to Excel
-            
-            **Roles:**
-            - **Admin**: Manage PFEP master data, full system access
-            - **User**: Perform inventory analysis using existing PFEP data
-            
-            **File Formats Supported:** CSV, Excel (.xlsx, .xls)
-            """)
-            
+            st.info("👋 Please select your role and login to continue")
             return
         
-        # Main interface based on role
+        # Main application
         if st.session_state.user_role == "Admin":
             self.admin_interface()
-            
-            # Separator
-            st.markdown("---")
-            
-            # Admin can also access user interface
+        else:
             self.user_interface()
+    
+    def admin_interface(self):
+        """Enhanced Admin interface with full functionality"""
+        st.markdown('<div class="admin-section"><h2>🔧 Admin Dashboard</h2></div>', unsafe_allow_html=True)
+        
+        # Sidebar options
+        st.sidebar.markdown("### 📋 Admin Options")
+        
+        # Data management
+        with st.sidebar.expander("📁 Data Management", expanded=True):
+            if st.button("🔄 Load Sample Data", key="load_sample"):
+                st.session_state.pfep_data = self.load_sample_pfep_data()
+                st.session_state.current_data = self.load_sample_current_inventory()
+                st.success("✅ Sample data loaded successfully!")
+                st.rerun()
             
-        elif st.session_state.user_role == "User":
-            self.user_interface()
+            if st.button("🗑️ Clear All Data", key="clear_data"):
+                st.session_state.pfep_data = None
+                st.session_state.current_data = None
+                st.session_state.matched_data = None
+                st.success("✅ All data cleared!")
+                st.rerun()
+        
+        # File upload section
+        st.markdown("### 📤 File Upload")
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            st.markdown("#### 📋 PFEP Master Data")
+            pfep_file = st.file_uploader(
+                "Upload PFEP File",
+                type=['xlsx', 'csv', 'xls'],
+                key="pfep_upload",
+                help="Upload your PFEP master data file"
+            )
+            
+            if pfep_file is not None:
+                try:
+                    if pfep_file.name.endswith('.csv'):
+                        df = pd.read_csv(pfep_file)
+                    else:
+                        df = pd.read_excel(pfep_file)
+                    
+                    st.session_state.pfep_data = self.standardize_pfep_data(df)
+                    if st.session_state.pfep_data:
+                        st.success(f"✅ PFEP data loaded: {len(st.session_state.pfep_data)} items")
+                        
+                        # Show preview
+                        with st.expander("👀 Preview PFEP Data"):
+                            preview_df = pd.DataFrame(st.session_state.pfep_data[:5])
+                            st.dataframe(preview_df, use_container_width=True)
+                    
+                except Exception as e:
+                    st.error(f"❌ Error loading PFEP file: {str(e)}")
+        
+        with col2:
+            st.markdown("#### 📦 Current Inventory")
+            inventory_file = st.file_uploader(
+                "Upload Current Inventory",
+                type=['xlsx', 'csv', 'xls'],
+                key="inventory_upload",
+                help="Upload your current inventory data file"
+            )
+            
+            if inventory_file is not None:
+                try:
+                    if inventory_file.name.endswith('.csv'):
+                        df = pd.read_csv(inventory_file)
+                    else:
+                        df = pd.read_excel(inventory_file)
+                    
+                    st.session_state.current_data = self.standardize_current_inventory(df)
+                    if st.session_state.current_data:
+                        st.success(f"✅ Inventory data loaded: {len(st.session_state.current_data)} items")
+                        
+                        # Show preview
+                        with st.expander("👀 Preview Inventory Data"):
+                            preview_df = pd.DataFrame(st.session_state.current_data[:5])
+                            st.dataframe(preview_df, use_container_width=True)
+                    
+                except Exception as e:
+                    st.error(f"❌ Error loading inventory file: {str(e)}")
+        
+        # Analysis section
+        if st.session_state.pfep_data and st.session_state.current_data:
+            st.markdown("### ⚙️ Analysis Configuration")
+            
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                tolerance = st.selectbox(
+                    "Tolerance Level (%)",
+                    [10, 20, 30, 40, 50],
+                    index=2,
+                    key="tolerance_select",
+                    help="Acceptable variance percentage"
+                )
+            
+            with col2:
+                if st.button("🔍 Run Analysis", key="run_analysis", type="primary"):
+                    with st.spinner("🔄 Processing data..."):
+                        # Match data
+                        matched_data, unmatched_parts, match_stats = self.match_inventory_data(
+                            st.session_state.pfep_data, 
+                            st.session_state.current_data
+                        )
+                        
+                        if matched_data:
+                            # Process matched data
+                            processed_data, summary_data, overall_metrics = self.process_matched_data(
+                                matched_data, tolerance
+                            )
+                            
+                            # Store results
+                            st.session_state.matched_data = {
+                                'processed_data': processed_data,
+                                'summary_data': summary_data,
+                                'overall_metrics': overall_metrics,
+                                'unmatched_parts': unmatched_parts,
+                                'match_stats': match_stats,
+                                'tolerance': tolerance,
+                                'analysis_time': datetime.now()
+                            }
+                            
+                            st.success("✅ Analysis completed successfully!")
+                            st.rerun()
+                        else:
+                            st.error("❌ No matching data found!")
+            
+            with col3:
+                if st.session_state.matched_data:
+                    st.success(f"✅ Last analysis: {st.session_state.matched_data['analysis_time'].strftime('%H:%M:%S')}")
+        
+        # Display results
+        if st.session_state.matched_data:
+            self.display_analysis_results()
+        else:
+            st.info("📊 Upload PFEP and Current Inventory files to begin analysis")
+    
+    def user_interface(self):
+        """Enhanced User interface with limited functionality"""
+        st.markdown('<div class="user-section"><h2>👤 User Dashboard</h2></div>', unsafe_allow_html=True)
+        
+        # Load sample data automatically for users
+        if not st.session_state.pfep_data:
+            st.session_state.pfep_data = self.load_sample_pfep_data()
+            st.session_state.current_data = self.load_sample_current_inventory()
+        
+        # Analysis section
+        st.markdown("### ⚙️ Analysis Configuration")
+        tolerance = st.selectbox(
+            "Tolerance Level (%)",
+            [10, 20, 30, 40, 50],
+            index=2,
+            key="user_tolerance",
+            help="Acceptable variance percentage"
+        )
+        
+        if st.button("🔍 Run Analysis", key="user_analysis", type="primary"):
+            with st.spinner("🔄 Processing data..."):
+                # Match and process data
+                matched_data, unmatched_parts, match_stats = self.match_inventory_data(
+                    st.session_state.pfep_data, 
+                    st.session_state.current_data
+                )
+                
+                if matched_data:
+                    processed_data, summary_data, overall_metrics = self.process_matched_data(
+                        matched_data, tolerance
+                    )
+                    
+                    st.session_state.matched_data = {
+                        'processed_data': processed_data,
+                        'summary_data': summary_data,
+                        'overall_metrics': overall_metrics,
+                        'unmatched_parts': unmatched_parts,
+                        'match_stats': match_stats,
+                        'tolerance': tolerance,
+                        'analysis_time': datetime.now()
+                    }
+                    
+                    st.success("✅ Analysis completed successfully!")
+                    st.rerun()
+        
+        # Display results
+        if st.session_state.matched_data:
+            self.display_analysis_results(user_mode=True)
+        else:
+            st.info("📊 Click 'Run Analysis' to view sample data analysis")
+    
+    def display_analysis_results(self, user_mode=False):
+        """Display comprehensive analysis results"""
+        data = st.session_state.matched_data
+        
+        # Analysis info
+        st.markdown("### 📊 Analysis Results")
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.info(f"🕒 Analysis Time: {data['analysis_time'].strftime('%Y-%m-%d %H:%M:%S')}")
+        with col2:
+            st.info(f"🎯 Tolerance: ±{data['tolerance']}%")
+        with col3:
+            st.info(f"🔗 Matched: {len(data['processed_data'])} items")
+        
+        # Metrics
+        self.display_enhanced_metrics(data['summary_data'], data['overall_metrics'])
+        
+        # Charts
+        st.markdown("### 📈 Visual Analysis")
+        charts = self.create_enhanced_visualizations(
+            data['processed_data'], 
+            data['summary_data'], 
+            data['overall_metrics']
+        )
+        
+        # Display charts in tabs
+        tab1, tab2, tab3, tab4, tab5 = st.tabs([
+            "📊 Status Distribution", 
+            "📈 Variance Analysis", 
+            "🏭 Vendor Analysis", 
+            "💰 Value Analysis",
+            "📍 Location Analysis"
+        ])
+        
+        with tab1:
+            st.markdown('<div class="graph-description">Distribution of inventory status across all analyzed parts</div>', unsafe_allow_html=True)
+            st.plotly_chart(charts['status_distribution'], use_container_width=True)
+        
+        with tab2:
+            st.markdown('<div class="graph-description">Histogram showing the distribution of variance percentages</div>', unsafe_allow_html=True)
+            st.plotly_chart(charts['variance_histogram'], use_container_width=True)
+        
+        with tab3:
+            st.markdown('<div class="graph-description">Inventory status breakdown by vendor</div>', unsafe_allow_html=True)
+            st.plotly_chart(charts['vendor_analysis'], use_container_width=True)
+        
+        with tab4:
+            st.markdown('<div class="graph-description">Relationship between stock value and variance percentage</div>', unsafe_allow_html=True)
+            st.plotly_chart(charts['value_variance_scatter'], use_container_width=True)
+        
+        with tab5:
+            st.markdown('<div class="graph-description">Inventory status distribution by geographic location</div>', unsafe_allow_html=True)
+            st.plotly_chart(charts['location_analysis'], use_container_width=True)
+        
+        # Detailed data table
+        show_filters = not user_mode  # Hide filters for users
+        self.display_data_table(data['processed_data'], show_filters=show_filters)
+        
+        # Unmatched items (Admin only)
+        if not user_mode and data['unmatched_parts']:
+            with st.expander(f"⚠️ Unmatched Items ({len(data['unmatched_parts'])})"):
+                unmatched_df = pd.DataFrame(data['unmatched_parts'])
+                st.dataframe(unmatched_df, use_container_width=True)
+        
+        # Match statistics
+        if not user_mode:
+            with st.expander("📊 Matching Statistics"):
+                match_stats = data['match_stats']
+                col1, col2, col3 = st.columns(3)
+                with col1:
+                    st.metric("Exact Matches", match_stats.get('exact', 0))
+                with col2:
+                    st.metric("Fuzzy Matches", match_stats.get('fuzzy', 0))
+                with col3:
+                    st.metric("Total Processed", match_stats.get('total', 0))
+                
+                # Match rate
+                total_parts = len(st.session_state.pfep_data) if st.session_state.pfep_data else 0
+                match_rate = (match_stats.get('total', 0) / total_parts * 100) if total_parts > 0 else 0
+                st.progress(match_rate / 100)
+                st.write(f"Match Rate: {match_rate:.1f}%")
 
-# Initialize and run the application
+# Main execution
 if __name__ == "__main__":
-    analyzer = PFEPInventoryAnalyzer()
-    analyzer.run()
+    try:
+        analyzer = PFEPInventoryAnalyzer()
+        analyzer.run_analysis()
+    except Exception as e:
+        st.error(f"❌ Application Error: {str(e)}")
+        st.info("Please refresh the page and try again.")
