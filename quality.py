@@ -866,7 +866,7 @@ class InventoryManagementSystem:
 def main():
     """Main function to run the application"""
     try:
-        app = InventoryAnalyzer()
+        app = InventoryManagementSystem()
         app.run()
     except Exception as e:
         st.error(f"Application Error: {str(e)}")
