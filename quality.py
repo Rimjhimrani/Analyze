@@ -287,7 +287,7 @@ class InventoryManagementSystem:
             if st.session_state.user_role == "Admin":
                 st.sidebar.markdown("---")
                 st.sidebar.markdown("### 🔄 Switch Role")
-                if st.sidebar.button("👤 Switch to User View", key="switch_to_user", help="Switch to user interface"):
+                if st.sidebar.button("👤 Switch to User View", key="switch_to_user"):
                     st.session_state.user_role = "User"
                     st.sidebar.success("✅ Switched to User view!")
                     st.rerun()
