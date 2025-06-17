@@ -141,21 +141,19 @@ class InventoryAnalyzer:
         
         # Analyze each PFEP item
         for part_no, pfep_item in pfep_dict.items():
-            inventory_item = inventory_dict.get(part_no, {})
-            
+            pfep_item = pfep_dict.get(part_no)
+            if not pfep_item:
+                continue  # Skip if not in PFEP
             current_qty = inventory_item.get('Current_QTY', 0)
-            rm_qty = pfep_item.get('RM_IN_QTY', 0)
             stock_value = inventory_item.get('Stock_Value', 0)
-            
+            rm_qty = pfep_item.get('RM_IN_QTY', 0)
             # Calculate variance
             if rm_qty > 0:
                 variance_pct = ((current_qty - rm_qty) / rm_qty) * 100
             else:
                 variance_pct = 0
-            
             variance_value = current_qty - rm_qty
             
-            # Determine status
             if abs(variance_pct) <= tolerance:
                 status = 'Within Norms'
             elif variance_pct > tolerance:
