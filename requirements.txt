@@ -1,0 +1,14 @@
+streamlit
+pandas
+numpy
+matplotlib
+seaborn
+plotly
+openpyxl
+xlsxwriter
+xlrd
+datetime
+io
+base64
+hashlib
+pyarrow
