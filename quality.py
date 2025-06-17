@@ -132,56 +132,209 @@ class InventoryAnalyzer:
         }
     
     def analyze_inventory(self, pfep_data, current_inventory, tolerance=30):
-        """Analyze ONLY inventory parts that exist in PFEP"""
-        results = []
-        # Create lookup dictionaries
-        pfep_dict = {item['Part_No']: item for item in pfep_data}
-        inventory_dict = {item['Part_No']: item for item in current_inventory}
+    """
+    Analyze ONLY inventory parts that have matching Part_No in PFEP
+    Focus on the 584 parts that exist in inventory, not missing parts
+    """
+    results = []
+    
+    # Create lookup dictionaries
+    pfep_dict = {item['Part_No']: item for item in pfep_data}
+    inventory_dict = {item['Part_No']: item for item in current_inventory}
+    
+    # Find matching parts between inventory and PFEP
+    inventory_parts = set(inventory_dict.keys())
+    pfep_parts = set(pfep_dict.keys())
+    matching_parts = inventory_parts.intersection(pfep_parts)
+    
+    print(f"📊 Total Inventory Parts: {len(inventory_parts)}")
+    print(f"📊 Total PFEP Parts: {len(pfep_parts)}")
+    print(f"✅ Matching Parts Found: {len(matching_parts)}")
+    print(f"🔍 Analyzing {len(matching_parts)} matching parts...")
+    
+    # ✅ Analyze only the matching parts (e.g., your 584 parts)
+    for part_no in matching_parts:
+        inventory_item = inventory_dict[part_no]  # We know it exists
+        pfep_item = pfep_dict[part_no]            # We know it exists
         
-        # ✅ Loop over inventory only
-        for part_no, inventory_item in inventory_dict.items():
-            pfep_item = pfep_dict.get(part_no)
-            if not pfep_item:
-                continue  # Skip inventory parts not found in PFEP
-            
-            current_qty = inventory_item.get('Current_QTY', 0)
-            stock_value = inventory_item.get('Stock_Value', 0)
-            rm_qty = pfep_item.get('RM_IN_QTY', 0)
-            
-            # Calculate variance
-            if rm_qty > 0:
-                variance_pct = ((current_qty - rm_qty) / rm_qty) * 100
-            else:
-                variance_pct = 0
-            
-            variance_value = current_qty - rm_qty
-            
-            # Determine status
-            if abs(variance_pct) <= tolerance:
-                status = 'Within Norms'
-            elif variance_pct > tolerance:
-                status = 'Excess Inventory'
-            else:
-                status = 'Short Inventory'
-            
-            result = {
-                'Material': part_no,
-                'Description': pfep_item.get('Description', ''),
-                'QTY': current_qty,
-                'RM IN QTY': rm_qty,
-                'Stock_Value': stock_value,
-                'Variance_%': variance_pct,
-                'Variance_Value': variance_value,
-                'Status': status,
-                'Vendor': pfep_item.get('Vendor_Name', 'Unknown'),
-                'Vendor_Code': pfep_item.get('Vendor_Code', ''),
-                'City': pfep_item.get('City', ''),
-                'State': pfep_item.get('State', '')
-            }
-            
-            results.append(result)
+        # Get values from inventory
+        current_qty = inventory_item.get('Current_QTY', 0)
+        stock_value = inventory_item.get('Stock_Value', 0)
         
-        return results
+        # Get required quantity from PFEP
+        rm_qty = pfep_item.get('RM_IN_QTY', 0)
+        
+        # Calculate variance
+        if rm_qty > 0:
+            variance_pct = ((current_qty - rm_qty) / rm_qty) * 100
+        else:
+            variance_pct = 0 if current_qty == 0 else 100  # If PFEP is 0 but inventory exists
+        
+        variance_value = current_qty - rm_qty
+        
+        # Determine status based on tolerance
+        if abs(variance_pct) <= tolerance:
+            status = 'Within Norms'
+        elif variance_pct > tolerance:
+            status = 'Excess Inventory'
+        else:
+            status = 'Short Inventory'
+        
+        # Create result record
+        result = {
+            'Material': part_no,
+            'Description': pfep_item.get('Description', inventory_item.get('Description', '')),
+            'QTY': current_qty,
+            'RM IN QTY': rm_qty,
+            'Stock_Value': stock_value,
+            'Variance_%': round(variance_pct, 2),
+            'Variance_Value': variance_value,
+            'Status': status,
+            'Vendor': pfep_item.get('Vendor_Name', 'Unknown'),
+            'Vendor_Code': pfep_item.get('Vendor_Code', ''),
+            'City': pfep_item.get('City', ''),
+            'State': pfep_item.get('State', ''),
+            'Unit_Price': inventory_item.get('Unit_Price', 0),
+            'Category': pfep_item.get('Category', ''),
+            'ABC_Class': pfep_item.get('ABC_Class', '')
+        }
+        
+        results.append(result)
+    
+    # ✅ Print analysis summary
+    if results:
+        within_norms = len([r for r in results if r['Status'] == 'Within Norms'])
+        excess = len([r for r in results if r['Status'] == 'Excess Inventory'])
+        short = len([r for r in results if r['Status'] == 'Short Inventory'])
+        
+        print(f"""
+        📈 ANALYSIS SUMMARY:
+        ==================
+        Total Analyzed Parts: {len(results)}
+        Within Norms: {within_norms} ({within_norms/len(results)*100:.1f}%)
+        Excess Inventory: {excess} ({excess/len(results)*100:.1f}%)
+        Short Inventory: {short} ({short/len(results)*100:.1f}%)
+        """)
+    
+    return results
+
+def get_analysis_summary(self, analysis_results):
+    """Get detailed summary statistics from analysis results"""
+    if not analysis_results:
+        return {}
+    
+    total_parts = len(analysis_results)
+    within_norms = len([r for r in analysis_results if r['Status'] == 'Within Norms'])
+    excess = len([r for r in analysis_results if r['Status'] == 'Excess Inventory'])
+    short = len([r for r in analysis_results if r['Status'] == 'Short Inventory'])
+    
+    # Calculate total values
+    total_stock_value = sum(r.get('Stock_Value', 0) for r in analysis_results)
+    total_current_qty = sum(r.get('QTY', 0) for r in analysis_results)
+    total_required_qty = sum(r.get('RM IN QTY', 0) for r in analysis_results)
+    
+    # Calculate variance values
+    excess_value = sum(r.get('Stock_Value', 0) for r in analysis_results if r['Status'] == 'Excess Inventory')
+    short_value = sum(r.get('Stock_Value', 0) for r in analysis_results if r['Status'] == 'Short Inventory')
+    
+    return {
+        'total_parts': total_parts,
+        'within_norms': within_norms,
+        'excess_inventory': excess,
+        'short_inventory': short,
+        'within_norms_pct': (within_norms/total_parts*100) if total_parts > 0 else 0,
+        'excess_pct': (excess/total_parts*100) if total_parts > 0 else 0,
+        'short_pct': (short/total_parts*100) if total_parts > 0 else 0,
+        'total_stock_value': total_stock_value,
+        'total_current_qty': total_current_qty,
+        'total_required_qty': total_required_qty,
+        'excess_value': excess_value,
+        'short_value': short_value
+    }
+
+def filter_analysis_results(self, analysis_results, filter_criteria):
+    """Filter analysis results based on various criteria"""
+    if not analysis_results:
+        return []
+    
+    filtered_results = analysis_results.copy()
+    
+    # Filter by status
+    if filter_criteria.get('status') and filter_criteria['status'] != 'All':
+        filtered_results = [r for r in filtered_results if r['Status'] == filter_criteria['status']]
+    
+    # Filter by vendor
+    if filter_criteria.get('vendor') and filter_criteria['vendor'] != 'All':
+        filtered_results = [r for r in filtered_results if r['Vendor'] == filter_criteria['vendor']]
+    
+    # Filter by variance percentage range
+    if filter_criteria.get('min_variance_pct') is not None:
+        filtered_results = [r for r in filtered_results if r['Variance_%'] >= filter_criteria['min_variance_pct']]
+    
+    if filter_criteria.get('max_variance_pct') is not None:
+        filtered_results = [r for r in filtered_results if r['Variance_%'] <= filter_criteria['max_variance_pct']]
+    
+    # Filter by stock value range
+    if filter_criteria.get('min_stock_value') is not None:
+        filtered_results = [r for r in filtered_results if r['Stock_Value'] >= filter_criteria['min_stock_value']]
+    
+    if filter_criteria.get('max_stock_value') is not None:
+        filtered_results = [r for r in filtered_results if r['Stock_Value'] <= filter_criteria['max_stock_value']]
+    
+    return filtered_results
+
+# ✅ Usage example in your Streamlit app
+def display_inventory_analysis(self):
+    """Display inventory analysis focusing only on matching parts"""
+    
+    st.subheader("📊 Inventory Analysis - Matching Parts Only")
+    
+    if (st.session_state.persistent_pfep_data is not None and 
+        st.session_state.persistent_inventory_data is not None):
+        
+        # Get analysis results
+        if st.session_state.persistent_analysis_results is None:
+            with st.spinner("Analyzing matching inventory parts..."):
+                tolerance = st.session_state.user_preferences.get('default_tolerance', 30)
+                analysis_results = self.analyzer.analyze_inventory(
+                    st.session_state.persistent_pfep_data,
+                    st.session_state.persistent_inventory_data,
+                    tolerance=tolerance
+                )
+                st.session_state.persistent_analysis_results = analysis_results
+        
+        results = st.session_state.persistent_analysis_results
+        
+        if results:
+            # Display summary
+            summary = self.analyzer.get_analysis_summary(results)
+            
+            col1, col2, col3, col4 = st.columns(4)
+            with col1:
+                st.metric("Total Parts Analyzed", summary['total_parts'])
+            with col2:
+                st.metric("Within Norms", f"{summary['within_norms']} ({summary['within_norms_pct']:.1f}%)")
+            with col3:
+                st.metric("Excess Inventory", f"{summary['excess_inventory']} ({summary['excess_pct']:.1f}%)")
+            with col4:
+                st.metric("Short Inventory", f"{summary['short_inventory']} ({summary['short_pct']:.1f}%)")
+            
+            # Display results table
+            df_results = pd.DataFrame(results)
+            st.dataframe(df_results, use_container_width=True)
+            
+            # Download button
+            csv = df_results.to_csv(index=False)
+            st.download_button(
+                label="📥 Download Analysis Results",
+                data=csv,
+                file_name=f"inventory_analysis_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+                mime="text/csv"
+            )
+        else:
+            st.warning("No matching parts found between inventory and PFEP data.")
+    else:
+        st.warning("Please upload both PFEP and Inventory data first.")
 
 class InventoryManagementSystem:
     """Main application class"""
