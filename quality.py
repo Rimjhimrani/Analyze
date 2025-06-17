@@ -114,7 +114,7 @@ class PFEPInventoryAnalyzer:
             
             if role == "Admin":
                 password = st.sidebar.text_input("Admin Password", type="password")
-                if password == "admin123":  # Simple password - replace with secure authentication
+                if password == "Agilomatrix@1234":  # Simple password - replace with secure authentication
                     st.session_state.user_role = "Admin"
                     st.sidebar.success("✅ Admin authenticated!")
                     st.rerun()
