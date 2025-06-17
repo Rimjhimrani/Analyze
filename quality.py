@@ -132,13 +132,12 @@ class InventoryAnalyzer:
         }
     
     def analyze_inventory(self, pfep_data, current_inventory, tolerance=30):
-    """
-    Analyze ONLY inventory parts that have matching Part_No in PFEP
-    Focus on the 584 parts that exist in inventory, not missing parts
-    """
-    results = []
-    
-    # Create lookup dictionaries
+        """
+        Analyze ONLY inventory parts that have matching Part_No in PFEP
+        Focus on the 584 parts that exist in inventory, not missing parts
+        """
+        results = []
+        # Create lookup dictionaries
     pfep_dict = {item['Part_No']: item for item in pfep_data}
     inventory_dict = {item['Part_No']: item for item in current_inventory}
     
