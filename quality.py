@@ -132,18 +132,18 @@ class InventoryAnalyzer:
         }
     
     def analyze_inventory(self, pfep_data, current_inventory, tolerance=30):
-        """Analyze ONLY inventory parts that exist in PFEP"""
-        results = []
-        
-        # Create lookup dictionaries
-        pfep_dict = {item['Part_No']: item for item in pfep_data}
-        inventory_dict = {item['Part_No']: item for item in current_inventory}
-        
-        # ✅ Loop over inventory only
-        for part_no, inventory_item in inventory_dict.items():
-            pfep_item = pfep_dict.get(part_no)
-            if not pfep_item:
-                continue  # Skip inventory parts not found in PFEP
+    """Analyze ONLY inventory parts that exist in PFEP"""
+    results = []
+
+    # Create lookup dictionaries
+    pfep_dict = {item['Part_No']: item for item in pfep_data}
+    inventory_dict = {item['Part_No']: item for item in current_inventory}
+
+    # ✅ Loop over inventory only
+    for part_no, inventory_item in inventory_dict.items():
+        pfep_item = pfep_dict.get(part_no)
+        if not pfep_item:
+            continue  # Skip inventory parts not found in PFEP
 
         current_qty = inventory_item.get('Current_QTY', 0)
         stock_value = inventory_item.get('Stock_Value', 0)
@@ -179,7 +179,9 @@ class InventoryAnalyzer:
             'City': pfep_item.get('City', ''),
             'State': pfep_item.get('State', '')
         }
+
         results.append(result)
+
     return results
 
 class InventoryManagementSystem:
