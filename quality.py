@@ -653,8 +653,8 @@ class InventoryManagementSystem:
                 if pfep_data:
                     st.success(f"✅ Current PFEP data contains {len(pfep_data)} parts")
                                with st.expander("📊 View PFEP Data Preview"):
-                               df = pd.DataFrame(pfep_data)
-                               st.dataframe(df.head(10), use_container_width=True)
+                                   df = pd.DataFrame(pfep_data)
+                                   st.dataframe(df.head(10), use_container_width=True)
                 # Admin unlock option
                 if st.session_state.user_role == "Admin":
                     st.markdown("---")
