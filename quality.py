@@ -636,83 +636,71 @@ class InventoryManagementSystem:
                     st.info(f"• {warning}")
         
         def load_pfep_data_section(self):
-        """Enhanced PFEP data loading with locking mechanism"""
-        st.markdown("## 📋 PFEP Master Data")
-        
-        # Check if data is locked
-        is_locked = st.session_state.get('persistent_pfep_locked', False)
-        
-        if is_locked:
-            st.markdown("""
-            <div class="info-box">
-                <h4>🔒 PFEP Data Locked</h4>
-                <p>PFEP data is currently locked and cannot be modified. Only Admin can unlock.</p>
-            </div>
-            """, unsafe_allow_html=True)
-            
-            # Show current data info
-            pfep_data = self.persistence.load_data_from_session_state('persistent_pfep_data')
-            if pfep_data:
-                st.success(f"✅ Current PFEP data contains {len(pfep_data)} parts")
-                with st.expander("📊 View PFEP Data Preview"):
-                    df = pd.DataFrame(pfep_data)
-                    st.dataframe(df.head(10), use_container_width=True)
-            
-            # Admin unlock option
-            if st.session_state.user_role == "Admin":
-                st.markdown("---")
-                if st.button("🔓 Unlock PFEP Data", key="unlock_pfep"):
-                    st.session_state.persistent_pfep_locked = False
-                    st.success("🔓 PFEP data unlocked! You can now modify it.")
-                    st.rerun()
-            
-            return
-        
-        # Data loading options
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            st.markdown("### 📁 Upload PFEP File")
-            uploaded_pfep = st.file_uploader(
-                "Choose PFEP file",
-                type=['csv', 'xlsx', 'xls'],
-                key="pfep_uploader",
-                help="Upload your PFEP master data file (CSV or Excel format)"
+            """Enhanced PFEP data loading with locking mechanism"""
+            st.markdown("## 📋 PFEP Master Data")
+            # Check if data is locked
+            is_locked = st.session_state.get('persistent_pfep_locked', False)
+            if is_locked:
+                st.markdown("""
+                <div class="info-box">
+                   <h4>🔒 PFEP Data Locked</h4>
+                   <p>PFEP data is currently locked and cannot be modified. Only Admin can unlock.</p>
+                </div>
+                """, unsafe_allow_html=True)
+                
+                # Show current data info
+                pfep_data = self.persistence.load_data_from_session_state('persistent_pfep_data')
+                if pfep_data:
+                    st.success(f"✅ Current PFEP data contains {len(pfep_data)} parts")
+                               with st.expander("📊 View PFEP Data Preview"):
+                               df = pd.DataFrame(pfep_data)
+                               st.dataframe(df.head(10), use_container_width=True)
+                # Admin unlock option
+                if st.session_state.user_role == "Admin":
+                    st.markdown("---")
+                    if st.button("🔓 Unlock PFEP Data", key="unlock_pfep"):
+                        st.session_state.persistent_pfep_locked = False
+                        st.success("🔓 PFEP data unlocked! You can now modify it.")
+                        st.rerun()
+                return
+            # Data loading options
+            col1, col2 = st.columns(2)
+            with col1:
+                st.markdown("### 📁 Upload PFEP File")
+                uploaded_pfep = st.file_uploader(
+                    "Choose PFEP file",
+                    type=['csv', 'xlsx', 'xls'],
+                    key="pfep_uploader",
+                    help="Upload your PFEP master data file (CSV or Excel format)"
             )
-        
-        with col2:
-            st.markdown("### 🎯 Sample Data")
-            if st.button("📊 Load Sample PFEP Data", key="load_sample_pfep"):
-                sample_data = self.load_sample_pfep_data()
-                self.persistence.save_data_to_session_state('persistent_pfep_data', sample_data)
-                st.success(f"✅ Sample PFEP data loaded! ({len(sample_data)} parts)")
-                st.rerun()
-        
-        # Process uploaded file
-        if uploaded_pfep is not None:
-            try:
-                if uploaded_pfep.name.endswith('.csv'):
-                    df = pd.read_csv(uploaded_pfep)
-                else:
-                    df = pd.read_excel(uploaded_pfep)
-                
-                standardized_data = self.standardize_pfep_data(df)
-                
-                if standardized_data:
-                    self.persistence.save_data_to_session_state('persistent_pfep_data', standardized_data)
-                    st.success(f"✅ PFEP data loaded successfully! ({len(standardized_data)} parts)")
-                    
-                    # Show preview
-                    with st.expander("📊 Data Preview", expanded=True):
-                        preview_df = pd.DataFrame(standardized_data).head(10)
-                        st.dataframe(preview_df, use_container_width=True)
-                    
+            with col2:
+                st.markdown("### 🎯 Sample Data")
+                if st.button("📊 Load Sample PFEP Data", key="load_sample_pfep"):
+                    sample_data = self.load_sample_pfep_data()
+                    self.persistence.save_data_to_session_state('persistent_pfep_data', sample_data)
+                    st.success(f"✅ Sample PFEP data loaded! ({len(sample_data)} parts)")
                     st.rerun()
-                else:
-                    st.error("❌ Failed to process PFEP data. Please check your file format.")
+            # Process uploaded file
+            if uploaded_pfep is not None:
+                try:
+                    if uploaded_pfep.name.endswith('.csv'):
+                        df = pd.read_csv(uploaded_pfep)
+                    else:
+                        df = pd.read_excel(uploaded_pfep)
+                    standardized_data = self.standardize_pfep_data(df)
                     
-            except Exception as e:
-                st.error(f"❌ Error loading PFEP file: {str(e)}")
+                    if standardized_data:
+                        self.persistence.save_data_to_session_state('persistent_pfep_data', standardized_data)
+                        st.success(f"✅ PFEP data loaded successfully! ({len(standardized_data)} parts)")
+                        # Show previe
+                        with st.expander("📊 Data Preview", expanded=True):
+                            preview_df = pd.DataFrame(standardized_data).head(10)
+                            st.dataframe(preview_df, use_container_width=True)
+                        st.rerun()
+                    else:
+                        st.error("❌ Failed to process PFEP data. Please check your file format.")
+                except Exception as e:
+                    st.error(f"❌ Error loading PFEP file: {str(e)}")
         
         # Show current data status
         pfep_data = self.persistence.load_data_from_session_state('persistent_pfep_data')
