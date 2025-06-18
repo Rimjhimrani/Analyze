@@ -536,10 +536,6 @@ class InventoryManagementSystem:
         
         # Check for extra parts in inventory (not in PFEP)
         extra_parts = inventory_parts - pfep_parts
-        if extra_parts:
-            warnings.append(f"Extra parts in inventory: {len(extra_parts)} parts not in PFEP")
-            if len(extra_parts) <= 10:
-                warnings.append(f"Extra parts: {', '.join(list(extra_parts)[:10])}")
         
         # Check for data quality issues
         zero_qty_parts = inventory_df[inventory_df['Current_QTY'] == 0]['Part_No'].tolist()
