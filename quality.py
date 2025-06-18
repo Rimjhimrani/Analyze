@@ -533,10 +533,6 @@ class InventoryManagementSystem:
         
         # Check for missing parts in inventory
         missing_parts = pfep_parts - inventory_parts
-        if missing_parts:
-            issues.append(f"Missing parts in inventory: {len(missing_parts)} parts not found")
-            if len(missing_parts) <= 10:
-                issues.append(f"Missing parts: {', '.join(list(missing_parts)[:10])}")
         
         # Check for extra parts in inventory (not in PFEP)
         extra_parts = inventory_parts - pfep_parts
