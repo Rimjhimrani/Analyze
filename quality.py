@@ -179,9 +179,7 @@ class InventoryAnalyzer:
             'City': pfep_item.get('City', ''),
             'State': pfep_item.get('State', '')
         }
-
         results.append(result)
-
     return results
 
 class InventoryManagementSystem:
